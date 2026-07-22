@@ -1,0 +1,19 @@
+Dev Search 0.1 本机版安装说明
+
+系统要求
+macOS 14.0 或更高版本，支持 Apple Silicon 和 Intel Mac。
+
+安装
+1. 将 DevSearch.app 拖到 Applications（应用程序）快捷入口。
+2. 打开“应用程序”文件夹。
+3. 首次启动时按住 Control 单击 DevSearch，选择“打开”，然后再次确认“打开”。
+
+为什么需要右键打开
+当前本机版已经完成应用完整性签名，但没有 Apple Developer ID 身份签名和 Apple 公证。macOS 可能因此阻止普通双击启动；这不代表应用要求高于 macOS 14。
+
+如果仍然无法打开
+1. 删除“应用程序”中的旧 DevSearch，重新从当前 DMG 拖入。
+2. 打开“系统设置”>“隐私与安全性”，查看页面底部是否出现 DevSearch 的“仍要打开”。只在确认应用来自本 DMG 时使用此按钮。
+3. 记录完整错误提示，并提供“关于本机”中的 macOS 版本和芯片类型。
+
+请勿从不可信来源下载 Dev Search，也不要使用来源不明的命令关闭系统安全功能。

@@ -1,0 +1,60 @@
+name: DevSearch
+options:
+  bundleIdPrefix: com.devsearch
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 0.1.0
+    DEVELOPMENT_TEAM: 26FAR3UCC2
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: YES
+targets:
+  DevSearch:
+    type: application
+    platform: macOS
+    sources:
+      - path: DevSearch
+        excludes:
+          - Resources/Info.plist
+          - Resources/Info-Debug.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.devsearch.app
+        PRODUCT_NAME: DevSearch
+        INFOPLIST_FILE: DevSearch/Resources/Info.plist
+      configs:
+        Debug:
+          INFOPLIST_FILE: DevSearch/Resources/Info-Debug.plist
+    scheme:
+      testTargets:
+        - DevSearchTests
+  DevSearchTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: DevSearchTests
+    dependencies:
+      - target: DevSearch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.devsearch.tests
+        GENERATE_INFOPLIST_FILE: YES
+  DevSearchUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: DevSearchUITests
+    dependencies:
+      - target: DevSearch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.devsearch.ui-tests
+        GENERATE_INFOPLIST_FILE: YES
+    scheme:
+      testTargets:
+        - DevSearchUITests
