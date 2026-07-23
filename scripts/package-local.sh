@@ -13,7 +13,7 @@ cd "${repository_root}"
 package_stamp="$(date +%Y%m%d-%H%M%S)"
 package_root="${PACKAGE_ROOT:-${repository_root}/.build/local-macos14-${package_stamp}}"
 derived_data="${package_root}/DerivedData"
-built_app="${derived_data}/Build/Products/Release/DevSearch.app"
+built_app="${derived_data}/Build/Products/Release/RepoGlance.app"
 dmg_staging="${package_root}/dmg-root"
 
 mkdir -p "${package_root}"
@@ -29,7 +29,7 @@ xcodebuild build \
   ONLY_ACTIVE_ARCH=NO \
   ARCHS="arm64 x86_64"
 
-binary_path="${built_app}/Contents/MacOS/DevSearch"
+binary_path="${built_app}/Contents/MacOS/RepoGlance"
 architectures="$(lipo -archs "${binary_path}")"
 [[ "${architectures}" == *"arm64"* && "${architectures}" == *"x86_64"* ]] || {
   echo "Expected a universal arm64/x86_64 binary, got: ${architectures}" >&2
@@ -43,6 +43,13 @@ minimum_system_version="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVers
 }
 
 app_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${built_app}/Contents/Info.plist")"
+bundle_display_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "${built_app}/Contents/Info.plist")"
+bundle_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "${built_app}/Contents/Info.plist")"
+bundle_executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${built_app}/Contents/Info.plist")"
+[[ "${bundle_display_name}" == "RepoGlance" && "${bundle_name}" == "RepoGlance" && "${bundle_executable}" == "RepoGlance" ]] || {
+  echo "Expected RepoGlance bundle naming, got display='${bundle_display_name}', name='${bundle_name}', executable='${bundle_executable}'" >&2
+  exit 1
+}
 artifact_name="RepoGlance-v${app_version}-macOS-universal"
 zip_path="${package_root}/${artifact_name}.zip"
 dmg_path="${package_root}/${artifact_name}.dmg"
@@ -69,7 +76,7 @@ ditto -c -k --sequesterRsrc --keepParent "${built_app}" "${zip_path}"
 sha256_path="${zip_path}.sha256"
 
 mkdir -p "${dmg_staging}"
-ditto "${built_app}" "${dmg_staging}/DevSearch.app"
+ditto "${built_app}" "${dmg_staging}/RepoGlance.app"
 ditto "${repository_root}/packaging/安装说明.txt" "${dmg_staging}/安装说明.txt"
 ln -s /Applications "${dmg_staging}/Applications"
 hdiutil create \

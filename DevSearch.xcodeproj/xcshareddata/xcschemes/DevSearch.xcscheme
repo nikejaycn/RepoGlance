@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "BDDD6ED013BC0B752EEA7242"
-               BuildableName = "DevSearch.app"
+               BuildableName = "RepoGlance.app"
                BlueprintName = "DevSearch"
                ReferencedContainer = "container:DevSearch.xcodeproj">
             </BuildableReference>
@@ -33,7 +33,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "BDDD6ED013BC0B752EEA7242"
-            BuildableName = "DevSearch.app"
+            BuildableName = "RepoGlance.app"
             BlueprintName = "DevSearch"
             ReferencedContainer = "container:DevSearch.xcodeproj">
          </BuildableReference>
@@ -69,7 +69,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "BDDD6ED013BC0B752EEA7242"
-            BuildableName = "DevSearch.app"
+            BuildableName = "RepoGlance.app"
             BlueprintName = "DevSearch"
             ReferencedContainer = "container:DevSearch.xcodeproj">
          </BuildableReference>
@@ -88,7 +88,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "BDDD6ED013BC0B752EEA7242"
-            BuildableName = "DevSearch.app"
+            BuildableName = "RepoGlance.app"
             BlueprintName = "DevSearch"
             ReferencedContainer = "container:DevSearch.xcodeproj">
          </BuildableReference>

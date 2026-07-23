@@ -488,7 +488,7 @@ private struct IndexSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .confirmationDialog("清除 Dev Search 的全部本地数据？", isPresented: $confirmClear) {
+        .confirmationDialog("清除 RepoGlance 的全部本地数据？", isPresented: $confirmClear) {
             Button("清除全部数据", role: .destructive) { Task { await model.clearAllData() } }
             Button("取消", role: .cancel) {}
         }
@@ -507,7 +507,7 @@ private struct AboutSettingsView: View {
         VStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 48))
-            Text("Dev Search").font(.title2.weight(.semibold))
+            Text("RepoGlance").font(.title2.weight(.semibold))
             Text(versionDescription)
                 .foregroundStyle(.secondary)
             Text("项目路径、README 和自定义说明只保存在本机。")

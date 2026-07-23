@@ -25,8 +25,8 @@ security find-generic-password \
 release_stamp="$(date +%Y%m%d-%H%M%S)"
 release_root="${PWD}/.build/release-${release_stamp}"
 archive_path="${release_root}/DevSearch.xcarchive"
-app_path="${archive_path}/Products/Applications/DevSearch.app"
-zip_path="${release_root}/DevSearch.zip"
+app_path="${archive_path}/Products/Applications/RepoGlance.app"
+zip_path="${release_root}/RepoGlance.zip"
 
 mkdir -p "${release_root}"
 
@@ -49,7 +49,7 @@ xcrun stapler staple "${app_path}"
 xcrun stapler validate "${app_path}"
 
 # Recreate the distributable after stapling the notarization ticket.
-stapled_zip_path="${release_root}/DevSearch-notarized.zip"
+stapled_zip_path="${release_root}/RepoGlance-notarized.zip"
 ditto -c -k --sequesterRsrc --keepParent "${app_path}" "${stapled_zip_path}"
 spctl --assess --type execute --verbose=2 "${app_path}"
 sha256_path="${stapled_zip_path}.sha256"

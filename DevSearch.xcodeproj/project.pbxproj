@@ -88,13 +88,13 @@
 		6296FCD07C7153888006406E /* PathNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathNormalizer.swift; sourceTree = "<group>"; };
 		72549101C0C43D24725E392D /* SearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchService.swift; sourceTree = "<group>"; };
 		763AE2E6BA275A6C11E2BE94 /* PathNormalizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathNormalizerTests.swift; sourceTree = "<group>"; };
-		7B67877C4D321D658405140F /* DevSearch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DevSearch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7EB224B454966A300FCCDC63 /* ProjectEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectEditorView.swift; sourceTree = "<group>"; };
 		88C259F922CDDED8FEA28103 /* SearchWindowCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchWindowCoordinator.swift; sourceTree = "<group>"; };
 		89C56A38C0BFBB0AC62FA57A /* DevSearchUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DevSearchUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8F76F1E732348FA6F4D69D49 /* GlobalHotKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotKeyManager.swift; sourceTree = "<group>"; };
 		9D756300BD48F43E11D45E32 /* DevSearchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevSearchApp.swift; sourceTree = "<group>"; };
 		9EEF0916D69C4DDF5DD6F5AF /* ClipboardHistoryServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardHistoryServiceTests.swift; sourceTree = "<group>"; };
+		A4D3B4E79424B46CC79B7CD1 /* RepoGlance.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RepoGlance.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A4F4CBA2D50B959C05B10CA2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A69886908A14F6527F0CF3DA /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		A8FB80E0E63BEABE9D9D7BBB /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -186,9 +186,9 @@
 		DAB37AFD36135B588DA21CF3 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				7B67877C4D321D658405140F /* DevSearch.app */,
 				57BEC75F8FAEBB61BD55F598 /* DevSearchTests.xctest */,
 				89C56A38C0BFBB0AC62FA57A /* DevSearchUITests.xctest */,
+				A4D3B4E79424B46CC79B7CD1 /* RepoGlance.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -283,7 +283,7 @@
 			packageProductDependencies = (
 			);
 			productName = DevSearch;
-			productReference = 7B67877C4D321D658405140F /* DevSearch.app */;
+			productReference = A4D3B4E79424B46CC79B7CD1 /* RepoGlance.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -433,7 +433,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.devsearch.tests;
 				SDKROOT = macosx;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DevSearch.app/Contents/MacOS/DevSearch";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RepoGlance.app/Contents/MacOS/RepoGlance";
 			};
 			name = Debug;
 		};
@@ -489,7 +489,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 26FAR3UCC2;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -510,7 +510,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.2;
+				MARKETING_VERSION = 0.2.3;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -557,7 +557,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 26FAR3UCC2;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -572,7 +572,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.2;
+				MARKETING_VERSION = 0.2.3;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -611,7 +611,8 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.devsearch.app;
-				PRODUCT_NAME = DevSearch;
+				PRODUCT_MODULE_NAME = DevSearch;
+				PRODUCT_NAME = RepoGlance;
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -629,7 +630,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.devsearch.tests;
 				SDKROOT = macosx;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DevSearch.app/Contents/MacOS/DevSearch";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RepoGlance.app/Contents/MacOS/RepoGlance";
 			};
 			name = Release;
 		};
@@ -644,7 +645,8 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.devsearch.app;
-				PRODUCT_NAME = DevSearch;
+				PRODUCT_MODULE_NAME = DevSearch;
+				PRODUCT_NAME = RepoGlance;
 				SDKROOT = macosx;
 			};
 			name = Debug;

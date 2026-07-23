@@ -140,7 +140,7 @@ final class AppModel: ObservableObject {
     func chooseAndAddScanRoot() {
         let panel = NSOpenPanel()
         panel.title = "选择扫描目录"
-        panel.message = "Dev Search 会发现此文件夹内的 Git 仓库和嵌套仓库。"
+        panel.message = "RepoGlance 会发现此文件夹内的 Git 仓库和嵌套仓库。"
         panel.prompt = "添加"
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -594,7 +594,7 @@ final class AppModel: ObservableObject {
 
     func exportCustomData() {
         let panel = NSSavePanel()
-        panel.title = "导出 Dev Search 数据"
+        panel.title = "导出 RepoGlance 数据"
         panel.nameFieldStringValue = "DevSearch-Export.json"
         panel.allowedContentTypes = [.json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -610,7 +610,7 @@ final class AppModel: ObservableObject {
 
     func importCustomData() {
         let panel = NSOpenPanel()
-        panel.title = "导入 Dev Search 数据"
+        panel.title = "导入 RepoGlance 数据"
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowedContentTypes = [.json]
