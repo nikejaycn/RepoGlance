@@ -146,7 +146,7 @@ final class AppModel: ObservableObject {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
         guard panel.runModal() == .OK else { return }
-        panel.urls.forEach(addScanRoot)
+        panel.urls.forEach { addScanRoot($0) }
     }
 
     func removeScanRoot(_ root: ScanRoot, removeMetadata: Bool = false) {
