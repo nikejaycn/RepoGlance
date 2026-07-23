@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		00604C9E6866C22E906E2CBB /* AppDataMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFD32FB596AD5DA03D8236C /* AppDataMigrationTests.swift */; };
+		03F7499188F66523EB74E8D8 /* ApplicationLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9C58F55A14FEB994DA3CD6F /* ApplicationLifecycleTests.swift */; };
 		12C67B016697FE0C288E066B /* AppData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51FAB122EF555E11F8252C41 /* AppData.swift */; };
 		13976899D6204878097C5AFD /* ClipboardHistoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EEF0916D69C4DDF5DD6F5AF /* ClipboardHistoryServiceTests.swift */; };
 		17C1B2560FB146F924FFBFE5 /* SearchServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11883557C8589ABB7C6FAF02 /* SearchServiceTests.swift */; };
@@ -102,6 +103,7 @@
 		B31EC1A09C3CDDC5EDD7F26D /* SearchPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchPanelView.swift; sourceTree = "<group>"; };
 		B4BBB92B3FF1F84259B51F5F /* PreviewPanelCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewPanelCoordinator.swift; sourceTree = "<group>"; };
 		C662018DA1CAAA96884A4AB6 /* DevSearchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevSearchUITests.swift; sourceTree = "<group>"; };
+		C9C58F55A14FEB994DA3CD6F /* ApplicationLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationLifecycleTests.swift; sourceTree = "<group>"; };
 		CC3BB86860A5D8350C8F9798 /* ProjectRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRecord.swift; sourceTree = "<group>"; };
 		DA701CD7FC11A1D13A922A69 /* GitRepositoryScannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRepositoryScannerTests.swift; sourceTree = "<group>"; };
 		DBB753C64AFF64EACD215706 /* EditorServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorServiceTests.swift; sourceTree = "<group>"; };
@@ -211,6 +213,7 @@
 			isa = PBXGroup;
 			children = (
 				4AFD32FB596AD5DA03D8236C /* AppDataMigrationTests.swift */,
+				C9C58F55A14FEB994DA3CD6F /* ApplicationLifecycleTests.swift */,
 				9EEF0916D69C4DDF5DD6F5AF /* ClipboardHistoryServiceTests.swift */,
 				22EFBE6CA825615F25C79A05 /* ClipboardSearchServiceTests.swift */,
 				DBB753C64AFF64EACD215706 /* EditorServiceTests.swift */,
@@ -345,6 +348,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				00604C9E6866C22E906E2CBB /* AppDataMigrationTests.swift in Sources */,
+				03F7499188F66523EB74E8D8 /* ApplicationLifecycleTests.swift in Sources */,
 				13976899D6204878097C5AFD /* ClipboardHistoryServiceTests.swift in Sources */,
 				87B481BF896D5A4172E068E5 /* ClipboardSearchServiceTests.swift in Sources */,
 				28701C516A2EE163F18B4324 /* EditorServiceTests.swift in Sources */,

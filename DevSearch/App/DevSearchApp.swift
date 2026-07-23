@@ -2,16 +2,24 @@ import AppKit
 import SwiftUI
 
 @MainActor
+private enum AppDependencies {
+    static let model = AppModel()
+}
+
+@MainActor
 final class DevSearchApplicationDelegate: NSObject, NSApplicationDelegate {
-    weak var model: AppModel?
     private var statusItemController: StatusItemController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        guard let model else { return }
+        let model = AppDependencies.model
         statusItemController = StatusItemController(model: model)
         Task { @MainActor in
             await model.start()
         }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
     }
 }
 
@@ -109,9 +117,7 @@ struct DevSearchApp: App {
     @StateObject private var model: AppModel
 
     init() {
-        let model = AppModel()
-        _model = StateObject(wrappedValue: model)
-        applicationDelegate.model = model
+        _model = StateObject(wrappedValue: AppDependencies.model)
     }
 
     var body: some Scene {
