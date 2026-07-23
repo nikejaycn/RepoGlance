@@ -1,4 +1,4 @@
-Dev Search 0.1 本机版安装说明
+RepoGlance 本机版安装说明
 
 系统要求
 macOS 14.0 或更高版本，支持 Apple Silicon 和 Intel Mac。
