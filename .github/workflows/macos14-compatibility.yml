@@ -11,6 +11,7 @@ on:
       - "packaging/**"
       - "scripts/package-local.sh"
       - "project.yml"
+      - ".github/fixtures/**"
       - ".github/workflows/macos14-compatibility.yml"
 
 permissions:
@@ -50,6 +51,8 @@ jobs:
         run: |
           app=".build/macos14-package/DerivedData/Build/Products/Release/DevSearch.app"
           binary="${app}/Contents/MacOS/DevSearch"
+          support="${HOME}/Library/Application Support/DevSearch"
+          crash_marker=".build/macos14-package/crash-marker"
 
           test "$(uname -r | cut -d. -f1)" = "23"
           test "$(lipo -archs "${binary}")" = "x86_64 arm64" ||
@@ -57,16 +60,51 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "${app}/Contents/Info.plist")" = "14.0"
           codesign --verify --deep --strict --verbose=2 "${app}"
 
+          mkdir -p "${support}"
+          cp .github/fixtures/duplicate-legacy-data.json "${support}/data.json"
+          touch "${crash_marker}"
+
           open "${app}"
+          pid=""
           for attempt in {1..20}; do
-            if pgrep -f "${binary}" >/dev/null; then
-              exit 0
+            if pid="$(pgrep -f "${binary}" | head -n 1)"; then
+              break
             fi
             sleep 0.5
           done
 
-          find "${HOME}/Library/Logs/DiagnosticReports" -maxdepth 1 -name 'DevSearch*' -print -exec cat {} \; || true
-          exit 1
+          if [[ -z "${pid}" ]]; then
+            find "${HOME}/Library/Logs/DiagnosticReports" -maxdepth 1 -name 'DevSearch*' -newer "${crash_marker}" -print -exec cat {} \; || true
+            exit 1
+          fi
+
+          sleep 30
+          if ! kill -0 "${pid}" 2>/dev/null; then
+            find "${HOME}/Library/Logs/DiagnosticReports" -maxdepth 1 -name 'DevSearch*' -newer "${crash_marker}" -print -exec cat {} \; || true
+            exit 1
+          fi
+
+          if find "${HOME}/Library/Logs/DiagnosticReports" -maxdepth 1 -name 'DevSearch*' -newer "${crash_marker}" -print -quit | grep -q .; then
+            find "${HOME}/Library/Logs/DiagnosticReports" -maxdepth 1 -name 'DevSearch*' -newer "${crash_marker}" -print -exec cat {} \;
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(
+              (Path.home() / "Library/Application Support/DevSearch/data.json").read_text()
+          )
+          for collection in ("scanRoots", "projects", "editors"):
+              identifiers = [
+                  item["canonicalPath"] if collection != "editors" else item["id"]
+                  for item in data.get(collection, [])
+              ]
+              assert len(identifiers) == len(set(identifiers)), collection
+          PY
+
+          kill "${pid}"
 
       - name: Upload compatibility package
         uses: actions/upload-artifact@v4

@@ -659,7 +659,9 @@ final class AppModel: ObservableObject {
 
     private func mergeDiscoveredEditors() {
         let discovered = editorService.discoverEditors()
-        var merged = Dictionary(uniqueKeysWithValues: data.editors.map { ($0.id, $0) })
+        var merged = data.editors.reduce(into: [String: EditorDefinition]()) {
+            $0[$1.id] = $1
+        }
         for editor in discovered { merged[editor.id] = editor }
         for (id, editor) in merged where !discovered.contains(where: { $0.id == id }) {
             var refreshed = editor

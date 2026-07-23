@@ -175,9 +175,12 @@ struct SearchPanelView: View {
                     projectSection(
                         title: "结果 \(model.visibleProjects.count)",
                         projects: Array(model.visibleProjects.prefix(200)),
-                        excerpts: Dictionary(uniqueKeysWithValues: model.searchMatches.compactMap { match in
-                            match.matchedExcerpt.map { (match.id, $0) }
-                        })
+                        excerpts: Dictionary(
+                            model.searchMatches.compactMap { match in
+                                match.matchedExcerpt.map { (match.id, $0) }
+                            },
+                            uniquingKeysWith: { _, last in last }
+                        )
                     )
                 }
             }
@@ -518,7 +521,10 @@ struct SearchPanelView: View {
     private func hierarchyDepth(for project: ProjectRecord) -> Int {
         var depth = 0
         var current = project.parentProjectID
-        let byID = Dictionary(uniqueKeysWithValues: model.data.projects.map { ($0.id, $0) })
+        let byID = Dictionary(
+            model.data.projects.map { ($0.id, $0) },
+            uniquingKeysWith: { _, last in last }
+        )
         var visited = Set<String>()
         while let parentID = current, !visited.contains(parentID), let parent = byID[parentID] {
             visited.insert(parentID)

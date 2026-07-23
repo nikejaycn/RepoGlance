@@ -26,4 +26,42 @@ final class AppDataMigrationTests: XCTestCase {
         XCTAssertEqual(data.preferences.clipboardHistoryLimit, 100)
         XCTAssertTrue(data.clipboardItems.isEmpty)
     }
+
+    func testDuplicateLegacyRecordsKeepLastValueInsteadOfCrashingAtStartup() throws {
+        let json = #"""
+        {
+          "scanRoots": [
+            {"canonicalPath":"/tmp/dev","displayPath":"old"},
+            {"canonicalPath":"/tmp/dev","displayPath":"new"}
+          ],
+          "projects": [
+            {"canonicalPath":"/tmp/dev/sample","customDescription":"old"},
+            {"canonicalPath":"/tmp/dev/sample","customDescription":"new"}
+          ],
+          "editors": [
+            {
+              "id":"com.example.Editor",
+              "name":"Old Editor",
+              "bundleIdentifier":"com.example.Editor",
+              "isManuallyAdded":true
+            },
+            {
+              "id":"com.example.Editor",
+              "name":"New Editor",
+              "bundleIdentifier":"com.example.Editor",
+              "isManuallyAdded":true
+            }
+          ]
+        }
+        """#
+
+        let data = try JSONDecoder().decode(AppData.self, from: Data(json.utf8))
+
+        XCTAssertEqual(data.scanRoots.count, 1)
+        XCTAssertEqual(data.scanRoots.first?.displayPath, "new")
+        XCTAssertEqual(data.projects.count, 1)
+        XCTAssertEqual(data.projects.first?.customDescription, "new")
+        XCTAssertEqual(data.editors.count, 1)
+        XCTAssertEqual(data.editors.first?.name, "New Editor")
+    }
 }

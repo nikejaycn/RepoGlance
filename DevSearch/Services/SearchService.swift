@@ -89,7 +89,7 @@ enum SearchService {
     }
 
     private static func hierarchyOrdered(_ ranked: [SearchMatch]) -> [SearchMatch] {
-        let matchByID = Dictionary(uniqueKeysWithValues: ranked.map { ($0.id, $0) })
+        let matchByID = Dictionary(ranked.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         var childrenByParent: [String: [SearchMatch]] = [:]
         for match in ranked {
             if let parentID = match.project.parentProjectID, matchByID[parentID] != nil {

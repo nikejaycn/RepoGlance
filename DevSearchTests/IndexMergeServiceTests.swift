@@ -112,6 +112,37 @@ final class IndexMergeServiceTests: XCTestCase {
         XCTAssertEqual(merged.first?.lastOpenedAt, old.lastOpenedAt)
     }
 
+    func testDuplicateExistingAndScannedRecordsAreMergedWithoutTrapping() {
+        let root = "/tmp/dev"
+        var oldFirst = makeProject(path: root + "/app", root: root)
+        oldFirst.customDescription = "old"
+        var oldLast = oldFirst
+        oldLast.customDescription = "new"
+
+        let scannedFirst = ProjectRecord(
+            canonicalPath: oldFirst.canonicalPath,
+            directoryName: "Old Name",
+            scanRootPath: root
+        )
+        let scannedLast = ProjectRecord(
+            canonicalPath: oldFirst.canonicalPath,
+            directoryName: "New Name",
+            scanRootPath: root
+        )
+
+        let merged = IndexMergeService.merge(
+            existing: [oldFirst, oldLast],
+            scanned: [scannedFirst, scannedLast],
+            activeRootPaths: [root],
+            exclusions: [],
+            issues: []
+        )
+
+        XCTAssertEqual(merged.count, 1)
+        XCTAssertEqual(merged.first?.directoryName, "New Name")
+        XCTAssertEqual(merged.first?.customDescription, "new")
+    }
+
     private func makeProject(path: String, root: String) -> ProjectRecord {
         ProjectRecord(
             canonicalPath: path,

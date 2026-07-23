@@ -177,11 +177,36 @@ extension AppData {
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        scanRoots = try values.decodeIfPresent([ScanRoot].self, forKey: .scanRoots) ?? []
-        projects = try values.decodeIfPresent([ProjectRecord].self, forKey: .projects) ?? []
-        exclusionRules = try values.decodeIfPresent([ExclusionRule].self, forKey: .exclusionRules) ?? []
-        editors = try values.decodeIfPresent([EditorDefinition].self, forKey: .editors) ?? []
-        clipboardItems = try values.decodeIfPresent([ClipboardItem].self, forKey: .clipboardItems) ?? []
+        scanRoots = (try values.decodeIfPresent([ScanRoot].self, forKey: .scanRoots) ?? [])
+            .deduplicatedKeepingLast(by: \.id)
+        projects = (try values.decodeIfPresent([ProjectRecord].self, forKey: .projects) ?? [])
+            .deduplicatedKeepingLast(by: \.id)
+        exclusionRules = (try values.decodeIfPresent([ExclusionRule].self, forKey: .exclusionRules) ?? [])
+            .deduplicatedKeepingLast(by: \.id)
+        editors = (try values.decodeIfPresent([EditorDefinition].self, forKey: .editors) ?? [])
+            .deduplicatedKeepingLast(by: \.id)
+        clipboardItems = (try values.decodeIfPresent([ClipboardItem].self, forKey: .clipboardItems) ?? [])
+            .deduplicatedKeepingLast(by: \.id)
         preferences = try values.decodeIfPresent(AppPreferences.self, forKey: .preferences) ?? AppPreferences()
+    }
+}
+
+extension Sequence {
+    func deduplicatedKeepingLast<Key: Hashable>(
+        by keyPath: KeyPath<Element, Key>
+    ) -> [Element] {
+        var result: [Element] = []
+        var indexByKey: [Key: Int] = [:]
+
+        for element in self {
+            let key = element[keyPath: keyPath]
+            if let index = indexByKey[key] {
+                result[index] = element
+            } else {
+                indexByKey[key] = result.count
+                result.append(element)
+            }
+        }
+        return result
     }
 }

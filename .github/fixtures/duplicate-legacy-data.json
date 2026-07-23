@@ -1,0 +1,37 @@
+{
+  "editors": [
+    {
+      "bundleIdentifier": "com.example.Editor",
+      "id": "com.example.Editor",
+      "isManuallyAdded": true,
+      "name": "Old Editor"
+    },
+    {
+      "bundleIdentifier": "com.example.Editor",
+      "id": "com.example.Editor",
+      "isManuallyAdded": true,
+      "name": "New Editor"
+    }
+  ],
+  "preferences": {},
+  "projects": [
+    {
+      "canonicalPath": "/tmp/repoglance-duplicate",
+      "customDescription": "old"
+    },
+    {
+      "canonicalPath": "/tmp/repoglance-duplicate",
+      "customDescription": "new"
+    }
+  ],
+  "scanRoots": [
+    {
+      "canonicalPath": "/tmp/repoglance-root",
+      "displayPath": "old"
+    },
+    {
+      "canonicalPath": "/tmp/repoglance-root",
+      "displayPath": "new"
+    }
+  ]
+}

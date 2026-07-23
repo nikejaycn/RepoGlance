@@ -79,6 +79,17 @@ final class SearchServiceTests: XCTestCase {
         XCTAssertEqual(childIndex, parentIndex.map { $0 + 1 })
     }
 
+    func testDuplicateProjectIDsDoNotCrashHierarchyOrdering() {
+        let first = project(path: "/tmp/duplicate", name: "Duplicate")
+        var second = first
+        second.customDescription = "duplicate match"
+
+        let matches = SearchService.search([first, second], query: "duplicate")
+
+        XCTAssertEqual(matches.count, 1)
+        XCTAssertEqual(matches.first?.id, first.id)
+    }
+
     private func project(path: String, name: String) -> ProjectRecord {
         ProjectRecord(canonicalPath: path, directoryName: name, scanRootPath: "/tmp")
     }

@@ -8,8 +8,11 @@ struct IndexMergeService {
         exclusions: [ExclusionRule],
         issues: [ScanIssue]
     ) -> [ProjectRecord] {
-        let existingByID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
-        let includedScanned = scanned.filter { !isExcluded($0.canonicalPath, by: exclusions) }
+        let uniqueExisting = existing.deduplicatedKeepingLast(by: \.id)
+        let existingByID = Dictionary(uniqueKeysWithValues: uniqueExisting.map { ($0.id, $0) })
+        let includedScanned = scanned
+            .filter { !isExcluded($0.canonicalPath, by: exclusions) }
+            .deduplicatedKeepingLast(by: \.id)
         let scannedIDs = Set(includedScanned.map(\.id))
         let offlineVolumeRoots = Set(issues
             .filter { $0.kind == .rootUnavailable && $0.rootPath.hasPrefix("/Volumes/") }
@@ -20,7 +23,7 @@ struct IndexMergeService {
             return preservingUserMetadata(from: old, in: project)
         }
 
-        for old in existing where !scannedIDs.contains(old.id) {
+        for old in uniqueExisting where !scannedIDs.contains(old.id) {
             if isExcluded(old.canonicalPath, by: exclusions) { continue }
 
             // A disabled or removed root was intentionally not part of this scan.
