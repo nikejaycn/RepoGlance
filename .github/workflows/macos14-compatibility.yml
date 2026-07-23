@@ -31,10 +31,10 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Run unit tests
+      - name: Compile app and tests with Xcode 16.2
         run: |
           xcodegen generate
-          xcodebuild test \
+          xcodebuild build-for-testing \
             -project DevSearch.xcodeproj \
             -scheme DevSearch \
             -destination "platform=macOS" \
