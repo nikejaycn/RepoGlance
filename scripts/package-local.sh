@@ -11,12 +11,10 @@ repository_root="${script_directory:h}"
 cd "${repository_root}"
 
 package_stamp="$(date +%Y%m%d-%H%M%S)"
-package_root="${repository_root}/.build/local-macos14-${package_stamp}"
+package_root="${PACKAGE_ROOT:-${repository_root}/.build/local-macos14-${package_stamp}}"
 derived_data="${package_root}/DerivedData"
 built_app="${derived_data}/Build/Products/Release/DevSearch.app"
-zip_path="${package_root}/DevSearch-macOS14-local.zip"
 dmg_staging="${package_root}/dmg-root"
-dmg_path="${package_root}/DevSearch-macOS14-local.dmg"
 
 mkdir -p "${package_root}"
 
@@ -44,6 +42,15 @@ minimum_system_version="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVers
   exit 1
 }
 
+app_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${built_app}/Contents/Info.plist")"
+artifact_name="RepoGlance-v${app_version}-macOS-universal"
+zip_path="${package_root}/${artifact_name}.zip"
+dmg_path="${package_root}/${artifact_name}.dmg"
+
+# Remove build-host provenance and quarantine metadata before signing. These
+# attributes are not part of the app and can confuse older Gatekeeper versions.
+xattr -cr "${built_app}"
+
 # Sign the complete bundle ad hoc so macOS can validate its internal integrity.
 # This does not replace Developer ID signing or notarization, but produces a
 # better-defined local package than leaving only the Mach-O linker signature.
@@ -52,26 +59,32 @@ codesign \
   --deep \
   --sign - \
   --timestamp=none \
-  --options runtime \
   "${built_app}"
+# codesign on newer macOS versions can add build-host provenance metadata.
+# Strip it after signing; extended attributes are not part of the code seal.
+xattr -cr "${built_app}"
 codesign --verify --deep --strict --verbose=2 "${built_app}"
 
 ditto -c -k --sequesterRsrc --keepParent "${built_app}" "${zip_path}"
 sha256_path="${zip_path}.sha256"
-shasum -a 256 "${zip_path}" > "${sha256_path}"
 
 mkdir -p "${dmg_staging}"
 ditto "${built_app}" "${dmg_staging}/DevSearch.app"
 ditto "${repository_root}/packaging/安装说明.txt" "${dmg_staging}/安装说明.txt"
 ln -s /Applications "${dmg_staging}/Applications"
 hdiutil create \
-  -volname "Dev Search" \
+  -volname "RepoGlance" \
   -srcfolder "${dmg_staging}" \
   -ov \
   -format UDZO \
+  -fs HFS+ \
   "${dmg_path}"
 dmg_sha256_path="${dmg_path}.sha256"
-shasum -a 256 "${dmg_path}" > "${dmg_sha256_path}"
+(
+  cd "${package_root}"
+  shasum -a 256 "${zip_path:t}" > "${sha256_path:t}"
+  shasum -a 256 "${dmg_path:t}" > "${dmg_sha256_path:t}"
+)
 
 echo "Local build: ${zip_path}"
 echo "SHA-256: ${sha256_path}"

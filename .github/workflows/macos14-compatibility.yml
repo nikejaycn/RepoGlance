@@ -1,0 +1,80 @@
+name: macOS 14 Compatibility
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "DevSearch/**"
+      - "DevSearchTests/**"
+      - "packaging/**"
+      - "scripts/package-local.sh"
+      - "project.yml"
+      - ".github/workflows/macos14-compatibility.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-package:
+    name: Build and launch on macOS 14
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16.2
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Run unit tests
+        run: |
+          xcodegen generate
+          xcodebuild test \
+            -project DevSearch.xcodeproj \
+            -scheme DevSearch \
+            -destination "platform=macOS" \
+            -derivedDataPath .build/CompatibilityTests \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Build universal compatibility package
+        env:
+          PACKAGE_ROOT: ${{ github.workspace }}/.build/macos14-package
+        run: zsh scripts/package-local.sh
+
+      - name: Verify packaged app can launch
+        run: |
+          app=".build/macos14-package/DerivedData/Build/Products/Release/DevSearch.app"
+          binary="${app}/Contents/MacOS/DevSearch"
+
+          test "$(uname -r | cut -d. -f1)" = "23"
+          test "$(lipo -archs "${binary}")" = "x86_64 arm64" ||
+            test "$(lipo -archs "${binary}")" = "arm64 x86_64"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "${app}/Contents/Info.plist")" = "14.0"
+          codesign --verify --deep --strict --verbose=2 "${app}"
+
+          open "${app}"
+          for attempt in {1..20}; do
+            if pgrep -f "${binary}" >/dev/null; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+
+          find "${HOME}/Library/Logs/DiagnosticReports" -maxdepth 1 -name 'DevSearch*' -print -exec cat {} \; || true
+          exit 1
+
+      - name: Upload compatibility package
+        uses: actions/upload-artifact@v4
+        with:
+          name: RepoGlance-macOS14
+          path: |
+            .build/macos14-package/RepoGlance-*.dmg
+            .build/macos14-package/RepoGlance-*.dmg.sha256
+            .build/macos14-package/RepoGlance-*.zip
+            .build/macos14-package/RepoGlance-*.zip.sha256
+          if-no-files-found: error
