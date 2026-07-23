@@ -47,7 +47,7 @@ jobs:
           PACKAGE_ROOT: ${{ github.workspace }}/.build/macos14-package
         run: zsh scripts/package-local.sh
 
-      - name: Verify packaged app can launch
+      - name: Verify native packaged app can launch
         run: |
           app=".build/macos14-package/DerivedData/Build/Products/Release/DevSearch.app"
           binary="${app}/Contents/MacOS/DevSearch"
@@ -105,6 +105,53 @@ jobs:
           PY
 
           kill "${pid}"
+          wait "${pid}" || true
+
+      - name: Verify x86_64 packaged app under Rosetta
+        run: |
+          app=".build/macos14-package/DerivedData/Build/Products/Release/DevSearch.app"
+          binary="${app}/Contents/MacOS/DevSearch"
+          support="${HOME}/Library/Application Support/DevSearch"
+          crash_marker=".build/macos14-package/x86-crash-marker"
+          launch_log=".build/macos14-package/x86-launch.log"
+
+          /usr/bin/arch -x86_64 /usr/bin/true
+          cp .github/fixtures/duplicate-legacy-data.json "${support}/data.json"
+          touch "${crash_marker}"
+
+          /usr/bin/arch -x86_64 "${binary}" >"${launch_log}" 2>&1 &
+          pid=$!
+
+          sleep 30
+          if ! kill -0 "${pid}" 2>/dev/null; then
+            cat "${launch_log}" || true
+            find "${HOME}/Library/Logs/DiagnosticReports" -maxdepth 1 -name 'DevSearch*' -newer "${crash_marker}" -print -exec cat {} \; || true
+            exit 1
+          fi
+
+          if find "${HOME}/Library/Logs/DiagnosticReports" -maxdepth 1 -name 'DevSearch*' -newer "${crash_marker}" -print -quit | grep -q .; then
+            cat "${launch_log}" || true
+            find "${HOME}/Library/Logs/DiagnosticReports" -maxdepth 1 -name 'DevSearch*' -newer "${crash_marker}" -print -exec cat {} \;
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(
+              (Path.home() / "Library/Application Support/DevSearch/data.json").read_text()
+          )
+          for collection in ("scanRoots", "projects", "editors"):
+              identifiers = [
+                  item["canonicalPath"] if collection != "editors" else item["id"]
+                  for item in data.get(collection, [])
+              ]
+              assert len(identifiers) == len(set(identifiers)), collection
+          PY
+
+          kill "${pid}"
+          wait "${pid}" || true
 
       - name: Upload compatibility package
         uses: actions/upload-artifact@v4
