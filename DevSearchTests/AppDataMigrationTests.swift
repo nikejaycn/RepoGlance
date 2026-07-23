@@ -22,5 +22,8 @@ final class AppDataMigrationTests: XCTestCase {
         XCTAssertEqual(data.preferences.automaticScanIntervalMinutes, 15)
         XCTAssertTrue(data.preferences.globalShortcutEnabled)
         XCTAssertEqual(data.preferences.globalShortcut, .optionSpace)
+        XCTAssertFalse(data.preferences.clipboardHistoryEnabled)
+        XCTAssertEqual(data.preferences.clipboardHistoryLimit, 100)
+        XCTAssertTrue(data.clipboardItems.isEmpty)
     }
 }

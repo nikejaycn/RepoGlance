@@ -4,81 +4,153 @@ struct SearchPanelView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
-    @State private var selectionIndex = 0
+    @State private var projectSelectionIndex = 0
+    @State private var clipboardSelectionIndex = 0
+    @State private var removedClipboardItem: (item: ClipboardItem, index: Int)?
+    @State private var confirmClearClipboardHistory = false
 
     var body: some View {
         VStack(spacing: 0) {
+            modeHeader
             searchHeader
             Divider()
             content
-            Divider()
+            if removedClipboardItem != nil {
+                undoBar
+                Divider()
+            }
             statusBar
         }
-        .frame(width: 420)
-        .frame(minHeight: 184, maxHeight: 620)
-        .onChange(of: model.query) { _, _ in selectionIndex = 0; syncSelection() }
-        .onChange(of: selectionIndex) { _, _ in syncSelection() }
-        .alert("Dev Search", isPresented: errorBinding) {
+        .frame(width: 560)
+        .frame(minHeight: 420, maxHeight: 704)
+        .onChange(of: model.query) { _, _ in
+            projectSelectionIndex = 0
+            syncProjectSelection()
+        }
+        .onChange(of: model.clipboardQuery) { _, _ in
+            clipboardSelectionIndex = 0
+            syncClipboardSelection()
+        }
+        .onChange(of: model.quickPanelMode) { _, mode in
+            PreviewPanelCoordinator.shared.hideImmediately()
+            removedClipboardItem = nil
+            if mode == .projects { syncProjectSelection() }
+            else { syncClipboardSelection() }
+        }
+        .onAppear {
+            if model.quickPanelMode == .projects { syncProjectSelection() }
+            else { syncClipboardSelection() }
+        }
+        .alert("RepoGlance", isPresented: errorBinding) {
             Button("好", role: .cancel) { model.presentedError = nil }
         } message: {
             Text(model.presentedError ?? "")
         }
+        .confirmationDialog("清空剪贴板历史？", isPresented: $confirmClearClipboardHistory) {
+            Button("清空历史", role: .destructive) {
+                model.clearClipboardHistory()
+                removedClipboardItem = nil
+                clipboardSelectionIndex = 0
+                syncClipboardSelection()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("此操作会删除本机保存的全部剪贴板文本，无法撤销。")
+        }
+    }
+
+    private var modeHeader: some View {
+        ZStack {
+            Picker("快速面板模式", selection: $model.quickPanelMode) {
+                Text("⌘1  项目").tag(QuickPanelMode.projects)
+                Text("⌘2  剪贴板").tag(QuickPanelMode.clipboard)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 268)
+            .accessibilityLabel("快速面板模式")
+            .accessibilityIdentifier("quickPanelModePicker")
+
+            if model.quickPanelMode == .clipboard {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(model.data.preferences.clipboardHistoryEnabled ? .green : .secondary)
+                        .frame(width: 7, height: 7)
+                    Text(model.data.preferences.clipboardHistoryEnabled ? "记录中" : "已暂停")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.trailing, 16)
+            }
+        }
+        .padding(.top, 12)
+        .padding(.bottom, 4)
     }
 
     private var searchHeader: some View {
         NativeSearchField(
-            text: $model.query,
-            placeholder: "搜索项目、路径、说明或标签…",
+            text: activeQueryBinding,
+            placeholder: model.quickPanelMode == .projects
+                ? "搜索项目、路径、说明或标签…"
+                : "搜索剪贴板文本…",
             onMoveUp: { moveSelection(.up) },
             onMoveDown: { moveSelection(.down) },
-            onSubmit: openSelection,
+            onSubmit: performPrimaryAction,
             onChooseOpeningMethod: chooseOpeningMethod,
             onRevealInFinder: revealSelection,
             onEditProject: editSelection,
-            onRefresh: { model.startScan() },
+            onRefresh: refreshProjects,
             onOpenSettings: { openSettings() },
             onEnterPreview: enterPreview,
+            onSelectProjects: { model.quickPanelMode = .projects },
+            onSelectClipboard: { model.quickPanelMode = .clipboard },
+            onCopySelection: copySelectionWithoutClosing,
+            onDeleteSelection: deleteClipboardSelection,
+            onClearClipboardHistory: requestClearClipboardHistory,
             onEscape: handleEscape
         )
         .frame(height: 36)
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 16)
         .padding(.vertical, 8)
     }
 
     @ViewBuilder
     private var content: some View {
+        switch model.quickPanelMode {
+        case .projects:
+            projectContent
+        case .clipboard:
+            clipboardContent
+        }
+    }
+
+    @ViewBuilder
+    private var projectContent: some View {
         if model.data.scanRoots.isEmpty {
             ContentUnavailableView {
-                Label("开始使用 Dev Search", systemImage: "folder.badge.plus")
+                Label("开始使用 RepoGlance", systemImage: "folder.badge.plus")
             } description: {
                 VStack(spacing: 6) {
-                    Text("选择你的 dev 或 projects 文件夹，自动发现其中的 Git 仓库与嵌套仓库。")
+                    Text("选择 dev 或 projects 文件夹，自动发现其中的 Git 仓库。")
                     Label("路径、README 摘要和说明仅保存在本机", systemImage: "lock")
                         .font(.caption)
                         .accessibilityIdentifier("local-privacy-note")
                 }
             } actions: {
-                VStack(spacing: 10) {
-                    if model.data.editors.isEmpty {
-                        Text("未发现支持的编辑器，可稍后在设置中添加。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Picker("默认编辑器", selection: onboardingEditorBinding) {
-                            Text("以后再说").tag(String?.none)
-                            ForEach(model.data.editors) { editor in
-                                Text(editor.name).tag(Optional(editor.bundleIdentifier))
-                            }
-                        }
-                        .frame(width: 280)
-                    }
-                    Button("选择扫描文件夹…") { model.chooseAndAddScanRoot() }
-                }
+                Button("选择扫描文件夹…") { model.chooseAndAddScanRoot() }
             }
             .frame(maxHeight: .infinity)
         } else if !model.query.isEmpty && model.visibleProjects.isEmpty && !model.isScanning {
-            ContentUnavailableView.search(text: model.query)
-                .frame(maxHeight: .infinity)
+            ContentUnavailableView {
+                Label("没有找到“\(model.query)”", systemImage: "magnifyingglass")
+            } description: {
+                Text("尝试项目名称、路径、说明或标签。")
+            } actions: {
+                Button("清除搜索") { model.query = "" }
+                Button("重新扫描") { model.startScan() }
+            }
+            .frame(maxHeight: .infinity)
         } else {
             projectList
         }
@@ -88,14 +160,16 @@ struct SearchPanelView: View {
         ScrollView {
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                 if model.query.isEmpty {
-                    if !model.favoriteProjects.isEmpty {
-                        projectSection(title: "收藏", projects: model.favoriteProjects)
-                    }
                     if !model.recentProjects.isEmpty {
-                        projectSection(title: "最近使用", projects: model.recentProjects)
+                        projectSection(title: "最近使用", projects: Array(model.recentProjects.prefix(5)))
                     }
-                    if model.favoriteProjects.isEmpty && model.recentProjects.isEmpty {
-                        projectSection(title: "项目", projects: Array(model.indexedProjects.prefix(20)))
+                    let recentIDs = Set(model.recentProjects.prefix(5).map(\.id))
+                    let favorites = model.favoriteProjects.filter { !recentIDs.contains($0.id) }
+                    if !favorites.isEmpty {
+                        projectSection(title: "收藏", projects: Array(favorites.prefix(5)))
+                    }
+                    if model.recentProjects.isEmpty && favorites.isEmpty {
+                        projectSection(title: "项目", projects: Array(model.indexedProjects.prefix(12)))
                     }
                 } else {
                     projectSection(
@@ -109,6 +183,7 @@ struct SearchPanelView: View {
             }
         }
         .frame(maxHeight: .infinity)
+        .accessibilityIdentifier("projectResults")
     }
 
     private func projectSection(
@@ -124,7 +199,7 @@ struct SearchPanelView: View {
                     isSelected: model.selectedProjectID == project.id,
                     matchedExcerpt: excerpts[project.id]
                 )
-                Divider().padding(.leading, 36)
+                Divider().padding(.leading, 44)
             }
         } header: {
             HStack {
@@ -133,116 +208,311 @@ struct SearchPanelView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
             }
-            .padding(.horizontal, 12)
-            .frame(height: 24)
+            .padding(.horizontal, 16)
+            .frame(height: 28)
             .background(.bar)
         }
     }
 
+    @ViewBuilder
+    private var clipboardContent: some View {
+        if !model.data.preferences.clipboardHistoryEnabled && model.data.clipboardItems.isEmpty {
+            ContentUnavailableView {
+                Label("剪贴板记录未启用", systemImage: "clipboard")
+            } description: {
+                Text("启用后仅在本机保存新复制的纯文本，不会自动粘贴。")
+            } actions: {
+                Button("启用剪贴板记录") { model.setClipboardHistoryEnabled(true) }
+            }
+            .frame(maxHeight: .infinity)
+        } else if model.visibleClipboardItems.isEmpty {
+            ContentUnavailableView(
+                model.clipboardQuery.isEmpty ? "还没有剪贴板记录" : "没有匹配内容",
+                systemImage: "clipboard"
+            )
+            .frame(maxHeight: .infinity)
+        } else {
+            clipboardList
+        }
+    }
+
+    private var clipboardList: some View {
+        ScrollView {
+            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                ForEach(Array(model.visibleClipboardItems.enumerated()), id: \.element.id) { index, item in
+                    if shouldShowDateHeader(at: index) {
+                        HStack {
+                            Text(dateSectionTitle(item.copiedAt))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(height: 28)
+                        .background(.bar)
+                    }
+                    ClipboardQuickRow(
+                        item: item,
+                        isSelected: model.selectedClipboardItemID == item.id,
+                        onCopy: { copyClipboardItem(item, close: true) },
+                        onDelete: { deleteClipboardItem(item) }
+                    )
+                    Divider().padding(.leading, 16)
+                }
+            }
+        }
+        .frame(maxHeight: .infinity)
+        .accessibilityIdentifier("clipboardHistoryList")
+    }
+
+    private var undoBar: some View {
+        HStack {
+            Text("已删除剪贴板记录")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("撤销") {
+                guard let removedClipboardItem else { return }
+                model.restoreClipboardItem(removedClipboardItem.item, at: removedClipboardItem.index)
+                self.removedClipboardItem = nil
+                syncClipboardSelection()
+            }
+            .buttonStyle(.link)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 34)
+        .background(.bar)
+    }
+
     private var statusBar: some View {
         HStack(spacing: 10) {
-            if model.isScanning {
-                ProgressView().controlSize(.small)
-                Text("正在扫描… 已发现 \(model.discoveredCount) 个")
-                    .foregroundStyle(.secondary)
-                Button("停止") { model.cancelScan() }
-                    .buttonStyle(.link)
-            } else if !model.scanIssues.isEmpty {
-                Label("\(model.scanIssues.count) 个目录问题", systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.secondary)
+            if model.quickPanelMode == .projects {
+                projectStatus
             } else {
-                Text("\(model.indexedProjects.count) 个项目 · 已更新")
-                    .foregroundStyle(.secondary)
+                clipboardStatus
             }
-
             Spacer()
-            Button { model.startScan() } label: { Image(systemName: "arrow.clockwise") }
-                .buttonStyle(.plain)
-                .help("重新扫描")
-                .accessibilityLabel("重新扫描项目")
-                .disabled(model.isScanning)
-            SettingsLink { Image(systemName: "gearshape") }
-                .buttonStyle(.plain)
-                .help("设置")
-                .accessibilityLabel("打开设置")
+            contextualShortcutHints
         }
         .font(.caption)
-        .padding(.horizontal, 12)
-        .frame(minHeight: 32)
-        .padding(.vertical, 2)
+        .padding(.horizontal, 16)
+        .frame(height: 44)
+    }
+
+    @ViewBuilder
+    private var projectStatus: some View {
+        if model.isScanning {
+            ProgressView().controlSize(.small)
+            Text("扫描中 · \(model.discoveredCount) 个")
+                .foregroundStyle(.secondary)
+        } else if !model.scanIssues.isEmpty {
+            Label("\(model.scanIssues.count) 个目录问题", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.secondary)
+        } else {
+            Text("\(model.indexedProjects.count) 个项目 · 已更新")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var clipboardStatus: some View {
+        HStack(spacing: 6) {
+            Text("\(model.data.clipboardItems.count) 条 · 仅保存在本机")
+                .foregroundStyle(.secondary)
+            Button(model.data.preferences.clipboardHistoryEnabled ? "暂停" : "恢复") {
+                model.setClipboardHistoryEnabled(!model.data.preferences.clipboardHistoryEnabled)
+            }
+            .buttonStyle(.link)
+        }
+    }
+
+    @ViewBuilder
+    private var contextualShortcutHints: some View {
+        if model.quickPanelMode == .projects {
+            Text("↑↓ 选择").foregroundStyle(.secondary)
+            Text("↵ 打开").foregroundStyle(.secondary)
+            Text("⌘→ 预览").foregroundStyle(.secondary)
+        } else {
+            Text("↑↓ 选择").foregroundStyle(.secondary)
+            Text("↵ 复制并关闭").foregroundStyle(.secondary)
+            Text("⌘C 连续复制").foregroundStyle(.secondary)
+        }
+    }
+
+    private var activeQueryBinding: Binding<String> {
+        Binding(
+            get: {
+                model.quickPanelMode == .projects ? model.query : model.clipboardQuery
+            },
+            set: { value in
+                if model.quickPanelMode == .projects { model.query = value }
+                else { model.clipboardQuery = value }
+            }
+        )
     }
 
     private var selectableProjects: [ProjectRecord] {
         if !model.query.isEmpty { return model.visibleProjects }
-        let combined = model.favoriteProjects + model.recentProjects
-        return combined.isEmpty ? Array(model.indexedProjects.prefix(20)) : combined
+        let recent = Array(model.recentProjects.prefix(5))
+        let recentIDs = Set(recent.map(\.id))
+        let favorites = model.favoriteProjects.filter { !recentIDs.contains($0.id) }
+        let combined = recent + favorites
+        return combined.isEmpty ? Array(model.indexedProjects.prefix(12)) : combined
     }
 
     private func moveSelection(_ direction: MoveCommandDirection) {
-        guard !selectableProjects.isEmpty else { return }
-        switch direction {
-        case .down: selectionIndex = min(selectionIndex + 1, selectableProjects.count - 1)
-        case .up: selectionIndex = max(selectionIndex - 1, 0)
-        default: break
+        if model.quickPanelMode == .projects {
+            guard !selectableProjects.isEmpty else { return }
+            switch direction {
+            case .down: projectSelectionIndex = min(projectSelectionIndex + 1, selectableProjects.count - 1)
+            case .up: projectSelectionIndex = max(projectSelectionIndex - 1, 0)
+            default: break
+            }
+            syncProjectSelection(showPreviewImmediately: true)
+        } else {
+            guard !model.visibleClipboardItems.isEmpty else { return }
+            switch direction {
+            case .down:
+                clipboardSelectionIndex = min(clipboardSelectionIndex + 1, model.visibleClipboardItems.count - 1)
+            case .up:
+                clipboardSelectionIndex = max(clipboardSelectionIndex - 1, 0)
+            default: break
+            }
+            syncClipboardSelection()
         }
-        // Keyboard navigation should reveal immediately. In a one-result list
-        // the index remains zero, so an onChange handler alone cannot do this.
-        guard selectableProjects.indices.contains(selectionIndex) else { return }
-        let project = selectableProjects[selectionIndex]
-        model.selectedProjectID = project.id
-        PreviewPanelCoordinator.shared.showImmediately(project: project, model: model)
     }
 
-    private func syncSelection() {
-        guard selectableProjects.indices.contains(selectionIndex) else {
+    private func syncProjectSelection(showPreviewImmediately: Bool = false) {
+        guard selectableProjects.indices.contains(projectSelectionIndex) else {
             model.selectedProjectID = nil
             return
         }
-        let project = selectableProjects[selectionIndex]
+        let project = selectableProjects[projectSelectionIndex]
         model.selectedProjectID = project.id
-        PreviewPanelCoordinator.shared.scheduleShow(project: project, model: model)
+        if showPreviewImmediately {
+            PreviewPanelCoordinator.shared.showImmediately(project: project, model: model)
+        } else {
+            PreviewPanelCoordinator.shared.scheduleShow(project: project, model: model)
+        }
     }
 
-    private func openSelection() {
-        guard selectableProjects.indices.contains(selectionIndex) else { return }
-        Task { await model.open(selectableProjects[selectionIndex]) }
+    private func syncClipboardSelection() {
+        guard model.visibleClipboardItems.indices.contains(clipboardSelectionIndex) else {
+            model.selectedClipboardItemID = nil
+            return
+        }
+        model.selectedClipboardItemID = model.visibleClipboardItems[clipboardSelectionIndex].id
+    }
+
+    private func performPrimaryAction() {
+        if model.quickPanelMode == .projects {
+            guard selectableProjects.indices.contains(projectSelectionIndex) else { return }
+            Task { await model.open(selectableProjects[projectSelectionIndex]) }
+        } else if model.visibleClipboardItems.indices.contains(clipboardSelectionIndex) {
+            copyClipboardItem(model.visibleClipboardItems[clipboardSelectionIndex], close: true)
+        }
     }
 
     private func chooseOpeningMethod() {
-        guard selectableProjects.indices.contains(selectionIndex) else { return }
-        Task { await model.chooseAndOpen(selectableProjects[selectionIndex]) }
+        guard model.quickPanelMode == .projects,
+              selectableProjects.indices.contains(projectSelectionIndex)
+        else { return }
+        Task { await model.chooseAndOpen(selectableProjects[projectSelectionIndex]) }
     }
 
     private func revealSelection() {
-        guard selectableProjects.indices.contains(selectionIndex) else { return }
-        model.revealInFinder(selectableProjects[selectionIndex])
+        guard model.quickPanelMode == .projects,
+              selectableProjects.indices.contains(projectSelectionIndex)
+        else { return }
+        model.revealInFinder(selectableProjects[projectSelectionIndex])
     }
 
     private func editSelection() {
-        guard selectableProjects.indices.contains(selectionIndex) else { return }
-        model.editingProjectID = selectableProjects[selectionIndex].id
+        guard model.quickPanelMode == .projects,
+              selectableProjects.indices.contains(projectSelectionIndex)
+        else { return }
+        model.editingProjectID = selectableProjects[projectSelectionIndex].id
         SearchWindowCoordinator.shared.hide()
         openWindow(id: "project-editor")
     }
 
+    private func refreshProjects() {
+        guard model.quickPanelMode == .projects else { return }
+        model.startScan()
+    }
+
     private func enterPreview() {
-        guard selectableProjects.indices.contains(selectionIndex) else { return }
-        let project = selectableProjects[selectionIndex]
+        guard model.quickPanelMode == .projects,
+              selectableProjects.indices.contains(projectSelectionIndex)
+        else { return }
+        let project = selectableProjects[projectSelectionIndex]
         model.selectedProjectID = project.id
         PreviewPanelCoordinator.shared.enter(project: project, model: model)
     }
 
+    private func copySelectionWithoutClosing() {
+        if model.quickPanelMode == .projects {
+            guard selectableProjects.indices.contains(projectSelectionIndex) else { return }
+            model.copyPath(selectableProjects[projectSelectionIndex])
+        } else if model.visibleClipboardItems.indices.contains(clipboardSelectionIndex) {
+            copyClipboardItem(model.visibleClipboardItems[clipboardSelectionIndex], close: false)
+        }
+    }
+
+    private func copyClipboardItem(_ item: ClipboardItem, close: Bool) {
+        model.copyClipboardItem(item)
+        if close { SearchWindowCoordinator.shared.hide() }
+    }
+
+    private func deleteClipboardSelection() {
+        guard model.quickPanelMode == .clipboard,
+              model.visibleClipboardItems.indices.contains(clipboardSelectionIndex)
+        else { return }
+        deleteClipboardItem(model.visibleClipboardItems[clipboardSelectionIndex])
+    }
+
+    private func requestClearClipboardHistory() {
+        guard model.quickPanelMode == .clipboard,
+              model.clipboardQuery.isEmpty,
+              !model.data.clipboardItems.isEmpty
+        else { return }
+        confirmClearClipboardHistory = true
+    }
+
+    private func deleteClipboardItem(_ item: ClipboardItem) {
+        guard let index = model.data.clipboardItems.firstIndex(where: { $0.id == item.id }) else { return }
+        removedClipboardItem = (item, index)
+        model.removeClipboardItem(item)
+        clipboardSelectionIndex = min(clipboardSelectionIndex, max(0, model.visibleClipboardItems.count - 1))
+        syncClipboardSelection()
+    }
+
     private func handleEscape() {
-        if PreviewPanelCoordinator.shared.isInteractive {
-            PreviewPanelCoordinator.shared.returnToSearch()
-            return
-        }
-        if !model.query.isEmpty {
-            model.query = ""
+        if model.quickPanelMode == .projects {
+            if PreviewPanelCoordinator.shared.isInteractive {
+                PreviewPanelCoordinator.shared.returnToSearch()
+            } else if !model.query.isEmpty {
+                model.query = ""
+            } else {
+                SearchWindowCoordinator.shared.hide()
+            }
+        } else if !model.clipboardQuery.isEmpty {
+            model.clipboardQuery = ""
         } else {
-            PreviewPanelCoordinator.shared.hideImmediately()
-            NSApp.keyWindow?.orderOut(nil)
+            SearchWindowCoordinator.shared.hide()
         }
+    }
+
+    private func shouldShowDateHeader(at index: Int) -> Bool {
+        let items = model.visibleClipboardItems
+        guard items.indices.contains(index) else { return false }
+        guard index > 0 else { return true }
+        return !Calendar.current.isDate(items[index].copiedAt, inSameDayAs: items[index - 1].copiedAt)
+    }
+
+    private func dateSectionTitle(_ date: Date) -> String {
+        if Calendar.current.isDateInToday(date) { return "今天" }
+        if Calendar.current.isDateInYesterday(date) { return "昨天" }
+        return date.formatted(date: .abbreviated, time: .omitted)
     }
 
     private func hierarchyDepth(for project: ProjectRecord) -> Int {
@@ -264,11 +534,59 @@ struct SearchPanelView: View {
             set: { if !$0 { model.presentedError = nil } }
         )
     }
+}
 
-    private var onboardingEditorBinding: Binding<String?> {
-        Binding(
-            get: { model.data.preferences.defaultEditorBundleIdentifier },
-            set: { model.setDefaultEditor($0) }
-        )
+private struct ClipboardQuickRow: View {
+    let item: ClipboardItem
+    let isSelected: Bool
+    let onCopy: () -> Void
+    let onDelete: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Button(action: onCopy) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(item.text)
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(metadata)
+                        .font(.caption)
+                        .foregroundStyle(isSelected ? .white.opacity(0.75) : .secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isHovering || isSelected {
+                Button("复制", action: onCopy)
+                    .buttonStyle(.borderless)
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("删除此剪贴板记录")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
+        .frame(minHeight: 68)
+        .background(isSelected ? Color.accentColor : .clear, in: RoundedRectangle(cornerRadius: 10))
+        .foregroundStyle(isSelected ? Color.white : Color.primary)
+        .padding(.horizontal, 6)
+        .onHover { isHovering = $0 }
+        .contextMenu {
+            Button("复制并关闭", action: onCopy)
+            Button("删除", role: .destructive, action: onDelete)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(item.text), \(metadata)")
+        .accessibilityValue(isSelected ? "已选择，按 Enter 复制并关闭" : "")
+    }
+
+    private var metadata: String {
+        let lineCount = max(1, item.text.split(separator: "\n", omittingEmptySubsequences: false).count)
+        let countDescription = lineCount > 1 ? "\(lineCount) 行" : "\(item.text.count) 个字符"
+        return "\(item.copiedAt.formatted(.relative(presentation: .named))) · \(countDescription)"
     }
 }

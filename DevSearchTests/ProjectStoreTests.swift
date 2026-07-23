@@ -14,12 +14,20 @@ final class ProjectStoreTests: XCTestCase {
         project.customDescription = "Description"
         project.tags = ["macOS"]
         project.isFavorite = true
-        let data = AppData(projects: [project])
+        let clipboardItem = ClipboardItem(text: "saved text")
+        let data = AppData(projects: [project], clipboardItems: [clipboardItem])
 
         try await store.save(data)
         let restored = try await store.load()
         XCTAssertEqual(restored.projects.first?.displayName, "My Project")
         XCTAssertEqual(restored.projects.first?.tags, ["macOS"])
         XCTAssertEqual(restored.projects.first?.isFavorite, true)
+        XCTAssertEqual(restored.clipboardItems.first?.id, clipboardItem.id)
+        XCTAssertEqual(restored.clipboardItems.first?.text, clipboardItem.text)
+        XCTAssertEqual(
+            restored.clipboardItems.first?.copiedAt.timeIntervalSince1970 ?? 0,
+            clipboardItem.copiedAt.timeIntervalSince1970,
+            accuracy: 1
+        )
     }
 }

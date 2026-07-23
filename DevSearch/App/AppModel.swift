@@ -8,7 +8,10 @@ import UniformTypeIdentifiers
 final class AppModel: ObservableObject {
     @Published private(set) var data = AppData()
     @Published var query = ""
+    @Published var clipboardQuery = ""
+    @Published var quickPanelMode: QuickPanelMode = .projects
     @Published var selectedProjectID: String?
+    @Published var selectedClipboardItemID: UUID?
     @Published private(set) var isScanning = false
     @Published private(set) var discoveredCount = 0
     @Published private(set) var scanIssues: [ScanIssue] = []
@@ -20,6 +23,7 @@ final class AppModel: ObservableObject {
     private let editorService: EditorService
     private let fileSystemMonitor: FileSystemMonitor
     private let hotKeyManager: GlobalHotKeyManager
+    private let clipboardMonitor: ClipboardMonitor
     private var scanTask: Task<Void, Never>?
     private var incrementalScanTask: Task<Void, Never>?
     private var periodicScanTask: Task<Void, Never>?
@@ -31,13 +35,15 @@ final class AppModel: ObservableObject {
         scanner: GitRepositoryScanner = GitRepositoryScanner(),
         editorService: EditorService = EditorService(),
         fileSystemMonitor: FileSystemMonitor = FileSystemMonitor(),
-        hotKeyManager: GlobalHotKeyManager = GlobalHotKeyManager()
+        hotKeyManager: GlobalHotKeyManager = GlobalHotKeyManager(),
+        clipboardMonitor: ClipboardMonitor = ClipboardMonitor()
     ) {
         self.store = store ?? ProjectStore(storageURL: Self.debugStorageURL)
         self.scanner = scanner
         self.editorService = editorService
         self.fileSystemMonitor = fileSystemMonitor
         self.hotKeyManager = hotKeyManager
+        self.clipboardMonitor = clipboardMonitor
     }
 
     var searchMatches: [SearchMatch] {
@@ -50,6 +56,10 @@ final class AppModel: ObservableObject {
 
     var visibleProjects: [ProjectRecord] {
         searchMatches.map(\.project)
+    }
+
+    var visibleClipboardItems: [ClipboardItem] {
+        ClipboardSearchService.search(data.clipboardItems, query: clipboardQuery)
     }
 
     var favoriteProjects: [ProjectRecord] {
@@ -90,6 +100,7 @@ final class AppModel: ObservableObject {
 #endif
         configureAutomaticScanning()
         configureGlobalShortcut()
+        configureClipboardMonitoring()
         if !data.scanRoots.isEmpty { startScan() }
 #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--show-search") {
@@ -101,9 +112,17 @@ final class AppModel: ObservableObject {
                 while !NSApp.isRunning, !Task.isCancelled {
                     await Task.yield()
                 }
-                try? await Task.sleep(for: .milliseconds(200))
+                try? await Task.sleep(for: .milliseconds(700))
                 guard let self else { return }
                 SearchWindowCoordinator.shared.show(model: self)
+            }
+        }
+        if ProcessInfo.processInfo.arguments.contains("--show-clipboard") {
+            NSApp.setActivationPolicy(.regular)
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(700))
+                guard let self else { return }
+                SearchWindowCoordinator.shared.show(model: self, mode: .clipboard)
             }
         }
 #endif
@@ -321,6 +340,44 @@ final class AppModel: ObservableObject {
         NSPasteboard.general.setString(project.canonicalPath, forType: .string)
     }
 
+    func setClipboardHistoryEnabled(_ enabled: Bool) {
+        data.preferences.clipboardHistoryEnabled = enabled
+        persist()
+        configureClipboardMonitoring()
+    }
+
+    func copyClipboardItem(_ item: ClipboardItem) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(item.text, forType: .string)
+        recordClipboardText(item.text)
+    }
+
+    func removeClipboardItem(_ item: ClipboardItem) {
+        data.clipboardItems.removeAll { $0.id == item.id }
+        persist()
+    }
+
+    func restoreClipboardItem(_ item: ClipboardItem, at index: Int) {
+        guard !data.clipboardItems.contains(where: { $0.id == item.id }) else { return }
+        data.clipboardItems.insert(item, at: min(max(0, index), data.clipboardItems.count))
+        data.clipboardItems = Array(
+            data.clipboardItems.prefix(max(1, data.preferences.clipboardHistoryLimit))
+        )
+        persist()
+    }
+
+    func resetQuickPanelSession() {
+        query = ""
+        clipboardQuery = ""
+        selectedProjectID = nil
+        selectedClipboardItemID = nil
+    }
+
+    func clearClipboardHistory() {
+        data.clipboardItems = []
+        persist()
+    }
+
     func openFullReadme(_ project: ProjectRecord) {
         guard let readmePath = project.readmePath else { return }
         let editor = project.defaultEditorBundleIdentifier
@@ -392,9 +449,15 @@ final class AppModel: ObservableObject {
     func updatePreferences(_ preferences: AppPreferences) {
         let scanIntervalChanged = data.preferences.automaticScanIntervalMinutes
             != preferences.automaticScanIntervalMinutes
+        let clipboardChanged = data.preferences.clipboardHistoryEnabled
+            != preferences.clipboardHistoryEnabled
         data.preferences = preferences
+        data.clipboardItems = Array(
+            data.clipboardItems.prefix(max(1, preferences.clipboardHistoryLimit))
+        )
         persist()
         configureGlobalShortcut()
+        if clipboardChanged { configureClipboardMonitoring() }
         if scanIntervalChanged { configureAutomaticScanning() }
     }
 
@@ -567,6 +630,7 @@ final class AppModel: ObservableObject {
             validateKnownPaths()
             configureAutomaticScanning()
             configureGlobalShortcut()
+            configureClipboardMonitoring()
             persist()
             startScan()
         } catch {
@@ -587,6 +651,7 @@ final class AppModel: ObservableObject {
             isScanning = false
             configureAutomaticScanning()
             configureGlobalShortcut()
+            configureClipboardMonitoring()
         } catch {
             presentedError = "无法清除数据：\(error.localizedDescription)"
         }
@@ -720,19 +785,54 @@ final class AppModel: ObservableObject {
     }
 
     private func configureGlobalShortcut() {
+        hotKeyManager.unregister()
         if data.preferences.globalShortcutEnabled {
-            let registered = hotKeyManager.register(shortcut: data.preferences.globalShortcut) { [weak self] in
+            let registered = hotKeyManager.register(
+                shortcut: data.preferences.globalShortcut,
+                id: 1
+            ) { [weak self] in
                 guard let self else { return }
-                SearchWindowCoordinator.shared.toggle(model: self)
+                SearchWindowCoordinator.shared.toggle(model: self, mode: .projects)
             }
             if !registered {
                 data.preferences.globalShortcutEnabled = false
                 persist()
                 presentedError = "快捷键 \(data.preferences.globalShortcut.displayName) 已被其他应用或系统占用，已自动关闭。请在设置中选择其他组合。"
             }
-        } else {
-            hotKeyManager.unregister()
         }
+
+        let clipboardRegistered = hotKeyManager.register(
+            shortcut: .optionShiftSpace,
+            id: 2
+        ) { [weak self] in
+            guard let self else { return }
+            SearchWindowCoordinator.shared.toggle(model: self, mode: .clipboard)
+        }
+        if !clipboardRegistered, presentedError == nil {
+            presentedError = "剪贴板快捷键 ⌥ ⇧ Space 已被其他应用或系统占用。仍可从菜单栏打开剪贴板。"
+        }
+    }
+
+    private func configureClipboardMonitoring() {
+        guard data.preferences.clipboardHistoryEnabled else {
+            clipboardMonitor.stop()
+            return
+        }
+        clipboardMonitor.start { [weak self] text in
+            self?.recordClipboardText(text)
+        }
+    }
+
+    private func recordClipboardText(_ text: String) {
+        guard data.preferences.clipboardHistoryEnabled else { return }
+        let updated = ClipboardHistoryService.inserting(
+            text,
+            into: data.clipboardItems,
+            limit: data.preferences.clipboardHistoryLimit
+        )
+        guard updated != data.clipboardItems else { return }
+        data.clipboardItems = updated
+        persist()
     }
 
 #if DEBUG

@@ -1,6 +1,9 @@
 .DS_Store
 .build/
 DerivedData/
+.codex-derived/
+.codex-release-derived/
+.codex-ui-derived/
 *.xcresult
 *.xcuserstate
 xcuserdata/

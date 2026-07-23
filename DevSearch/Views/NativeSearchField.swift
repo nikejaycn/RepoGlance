@@ -14,6 +14,11 @@ struct NativeSearchField: NSViewRepresentable {
     var onRefresh: () -> Void = {}
     var onOpenSettings: () -> Void = {}
     var onEnterPreview: () -> Void = {}
+    var onSelectProjects: () -> Void = {}
+    var onSelectClipboard: () -> Void = {}
+    var onCopySelection: () -> Void = {}
+    var onDeleteSelection: () -> Void = {}
+    var onClearClipboardHistory: () -> Void = {}
     var onEscape: () -> Void = {}
 
     func makeCoordinator() -> Coordinator { Coordinator(owner: self) }
@@ -36,6 +41,11 @@ struct NativeSearchField: NSViewRepresentable {
         field.onRefresh = onRefresh
         field.onOpenSettings = onOpenSettings
         field.onEnterPreview = onEnterPreview
+        field.onSelectProjects = onSelectProjects
+        field.onSelectClipboard = onSelectClipboard
+        field.onCopySelection = onCopySelection
+        field.onDeleteSelection = onDeleteSelection
+        field.onClearClipboardHistory = onClearClipboardHistory
         field.focusWhenAttachedToWindow = focusOnAppear
         context.coordinator.installArrowKeyMonitor(for: field)
 
@@ -48,6 +58,7 @@ struct NativeSearchField: NSViewRepresentable {
 
     func updateNSView(_ field: NSSearchField, context: Context) {
         if field.stringValue != text { field.stringValue = text }
+        field.placeholderString = placeholder
         context.coordinator.update(owner: self)
         guard let field = field as? ActionSearchField else { return }
         field.onMoveUp = onMoveUp
@@ -58,6 +69,11 @@ struct NativeSearchField: NSViewRepresentable {
         field.onRefresh = onRefresh
         field.onOpenSettings = onOpenSettings
         field.onEnterPreview = onEnterPreview
+        field.onSelectProjects = onSelectProjects
+        field.onSelectClipboard = onSelectClipboard
+        field.onCopySelection = onCopySelection
+        field.onDeleteSelection = onDeleteSelection
+        field.onClearClipboardHistory = onClearClipboardHistory
     }
 
     @MainActor
@@ -164,6 +180,11 @@ private final class ActionSearchField: NSSearchField {
     var onRefresh: () -> Void = {}
     var onOpenSettings: () -> Void = {}
     var onEnterPreview: () -> Void = {}
+    var onSelectProjects: () -> Void = {}
+    var onSelectClipboard: () -> Void = {}
+    var onCopySelection: () -> Void = {}
+    var onDeleteSelection: () -> Void = {}
+    var onClearClipboardHistory: () -> Void = {}
     var focusWhenAttachedToWindow = false
 
     override func viewDidMoveToWindow() {
@@ -189,10 +210,23 @@ private final class ActionSearchField: NSSearchField {
         if modifiers.contains(.command) {
             switch character {
             case "\r", "\u{3}": onChooseOpeningMethod(); return true
+            case "1": onSelectProjects(); return true
+            case "2": onSelectClipboard(); return true
+            case "c" where currentEditor()?.selectedRange.length == 0:
+                onCopySelection()
+                return true
             case "k": onEditProject(); return true
             case "r": onRefresh(); return true
             case ",": onOpenSettings(); return true
             default: break
+            }
+            if event.keyCode == 51, stringValue.isEmpty {
+                if modifiers.contains(.shift) {
+                    onClearClipboardHistory()
+                } else {
+                    onDeleteSelection()
+                }
+                return true
             }
         } else if modifiers.contains(.option), character == "\r" || character == "\u{3}" {
             onRevealInFinder()

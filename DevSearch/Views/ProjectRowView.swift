@@ -10,6 +10,7 @@ struct ProjectRowView: View {
     var matchedExcerpt: String? = nil
     @State private var screenFrame: NSRect?
     @State private var pendingExclusionIncludesDescendants: Bool?
+    @State private var isHovering = false
 
     var body: some View {
         Button {
@@ -62,11 +63,21 @@ struct ProjectRowView: View {
                 }
 
                 Spacer(minLength: 8)
-
-                trailingMetadata
+                if project.isFavorite {
+                    Image(systemName: "star.fill")
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("已收藏")
+                }
+                if isHovering || isSelected {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
             }
-            .padding(.horizontal, 10)
-            .frame(minHeight: 52)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .frame(minHeight: matchedExcerpt == nil ? 64 : 78)
             .contentShape(Rectangle())
             .background(selectionBackground)
             .background(ScreenFrameReader { screenFrame = $0 })
@@ -74,6 +85,7 @@ struct ProjectRowView: View {
         .buttonStyle(.plain)
         .padding(.leading, CGFloat(min(depth, 2)) * 14)
         .onHover { hovering in
+            isHovering = hovering
             if hovering {
                 model.selectedProjectID = project.id
                 PreviewPanelCoordinator.shared.scheduleShow(project: project, model: model, anchorRect: screenFrame)
@@ -131,65 +143,6 @@ struct ProjectRowView: View {
         }
     }
 
-    private var trailingMetadata: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 6) {
-                fullTagSummary
-                favoriteIndicator
-                if let editor = editorName {
-                    Text(editor).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }
-                selectionIndicator
-            }
-            HStack(spacing: 6) {
-                if !project.tags.isEmpty {
-                    Text("\(project.tags.count) 个标签")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                favoriteIndicator
-                selectionIndicator
-            }
-            selectionIndicator
-        }
-    }
-
-    @ViewBuilder private var fullTagSummary: some View {
-        if !project.tags.isEmpty {
-            HStack(spacing: 4) {
-                ForEach(project.tags.prefix(2), id: \.self) { tag in
-                    Text(tag)
-                        .font(.caption2)
-                        .lineLimit(1)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(.quaternary, in: Capsule())
-                }
-                if project.tags.count > 2 {
-                    Text("+\(project.tags.count - 2)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder private var favoriteIndicator: some View {
-        if project.isFavorite {
-            Image(systemName: "star.fill")
-                .foregroundStyle(.secondary)
-                .accessibilityLabel("已收藏")
-        }
-    }
-
-    @ViewBuilder private var selectionIndicator: some View {
-        if isSelected {
-            Image(systemName: "checkmark")
-                .font(.caption.weight(.semibold))
-                .accessibilityHidden(true)
-        }
-    }
-
     private var abbreviatedPath: String {
         (project.canonicalPath as NSString).abbreviatingWithTildeInPath
     }
@@ -208,11 +161,6 @@ struct ProjectRowView: View {
         case .missing: "路径失效"
         case .volumeOffline: "磁盘未连接"
         }
-    }
-
-    private var editorName: String? {
-        let identifier = project.defaultEditorBundleIdentifier ?? model.data.preferences.defaultEditorBundleIdentifier
-        return model.data.editors.first { $0.bundleIdentifier == identifier }?.name
     }
 
     private var nestedRelationship: String {
@@ -242,7 +190,6 @@ struct ProjectRowView: View {
         }
         parts.append(abbreviatedPath)
         if !project.tags.isEmpty { parts.append("标签 \(project.tags.joined(separator: "，"))") }
-        if let editorName { parts.append("编辑器 \(editorName)") }
         if let availabilityLabel { parts.append(availabilityLabel) }
         return parts.joined(separator: "，")
     }

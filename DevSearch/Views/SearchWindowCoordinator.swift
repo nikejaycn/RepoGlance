@@ -5,6 +5,7 @@ import SwiftUI
 final class SearchWindowCoordinator: NSObject, NSWindowDelegate {
     static let shared = SearchWindowCoordinator()
     private var panel: NSPanel?
+    private weak var model: AppModel?
 
     private var isUIAcceptanceMode: Bool {
 #if DEBUG
@@ -14,20 +15,23 @@ final class SearchWindowCoordinator: NSObject, NSWindowDelegate {
 #endif
     }
 
-    func toggle(model: AppModel) {
-        if let panel, panel.isVisible {
+    func toggle(model: AppModel, mode: QuickPanelMode = .projects) {
+        if let panel, panel.isVisible, model.quickPanelMode == mode {
             hide()
             return
         }
-        show(model: model)
+        show(model: model, mode: mode)
     }
 
     func hide() {
         panel?.orderOut(nil)
         PreviewPanelCoordinator.shared.hideImmediately()
+        model?.resetQuickPanelSession()
     }
 
-    func show(model: AppModel) {
+    func show(model: AppModel, mode: QuickPanelMode = .projects) {
+        self.model = model
+        model.quickPanelMode = mode
         let content = SearchPanelView().environmentObject(model)
         let hosting = NSHostingView(rootView: content)
         let target: NSPanel
@@ -36,7 +40,7 @@ final class SearchWindowCoordinator: NSObject, NSWindowDelegate {
             target = panel
         } else {
             let created = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 420, height: 520),
+                contentRect: NSRect(x: 0, y: 0, width: 560, height: 704),
                 styleMask: [.titled, .fullSizeContentView],
                 backing: .buffered,
                 defer: false

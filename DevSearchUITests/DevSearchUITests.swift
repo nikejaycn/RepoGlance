@@ -54,8 +54,7 @@ final class DevSearchUITests: XCTestCase {
     func testCoreControlsExposeAccessibleNames() {
         let searchField = app.searchFields["search-field"]
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
-        XCTAssertTrue(app.buttons["重新扫描项目"].exists)
-        XCTAssertTrue(app.buttons["打开设置"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["quickPanelModePicker"].exists)
 
         let webApp = projectButton(named: "WebApp")
         XCTAssertTrue(webApp.waitForExistence(timeout: 3))
@@ -135,6 +134,8 @@ final class DevSearchUITests: XCTestCase {
     }
 
     func testExcludeProjectAndRestoreItFromSettings() {
+        let searchField = app.searchFields["search-field"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
         let webApp = projectButton(named: "WebApp")
         XCTAssertTrue(webApp.waitForExistence(timeout: 8))
         webApp.rightClick()
@@ -147,12 +148,10 @@ final class DevSearchUITests: XCTestCase {
         XCTAssertFalse(webApp.waitForExistence(timeout: 2))
         XCTAssertTrue(projectButton(named: "API").waitForExistence(timeout: 3))
 
-        let settings = app.buttons["打开设置"]
-        XCTAssertTrue(settings.waitForExistence(timeout: 3))
-        settings.click()
-        let scanRootsTab = app.buttons["扫描目录"]
-        XCTAssertTrue(scanRootsTab.waitForExistence(timeout: 3))
-        scanRootsTab.click()
+        searchField.typeKey(",", modifierFlags: .command)
+        let projectSources = app.staticTexts["项目来源"]
+        XCTAssertTrue(projectSources.waitForExistence(timeout: 3))
+        projectSources.click()
         XCTAssertTrue(app.staticTexts["已排除项目"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["WebApp"].waitForExistence(timeout: 3))
         let restore = app.buttons["恢复"]
@@ -172,7 +171,7 @@ final class DevSearchUITests: XCTestCase {
         ]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["开始使用 Dev Search"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["开始使用 RepoGlance"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["选择扫描文件夹…"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["local-privacy-note"].exists)
     }
@@ -294,6 +293,27 @@ final class DevSearchUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["放弃未保存的更改？"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["继续编辑"].exists)
         XCTAssertTrue(app.buttons["放弃更改"].exists)
+    }
+
+    func testClipboardModeRecordsSearchesAndCopiesWithKeyboard() {
+        let searchField = app.searchFields["search-field"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+
+        searchField.typeKey("2", modifierFlags: .command)
+        let enable = app.buttons["启用剪贴板记录"]
+        XCTAssertTrue(enable.waitForExistence(timeout: 3))
+        enable.click()
+
+        searchField.click()
+        searchField.typeText("RepoGlance clipboard keyboard flow")
+        searchField.typeKey("a", modifierFlags: .command)
+        searchField.typeKey("c", modifierFlags: .command)
+
+        let captured = app.staticTexts["RepoGlance clipboard keyboard flow"]
+        XCTAssertTrue(captured.waitForExistence(timeout: 3))
+
+        searchField.typeKey(.return, modifierFlags: [])
+        XCTAssertFalse(app.windows.firstMatch.waitForExistence(timeout: 1))
     }
 
     private func createFixture(at root: URL) throws {

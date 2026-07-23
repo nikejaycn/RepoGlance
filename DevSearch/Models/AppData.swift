@@ -60,8 +60,35 @@ struct EditorDefinition: Codable, Identifiable, Hashable, Sendable {
     var isManuallyAdded: Bool
 }
 
+struct ClipboardItem: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    let text: String
+    var copiedAt: Date
+
+    init(id: UUID = UUID(), text: String, copiedAt: Date = .now) {
+        self.id = id
+        self.text = text
+        self.copiedAt = copiedAt
+    }
+}
+
+enum QuickPanelMode: String, CaseIterable, Identifiable, Sendable {
+    case projects
+    case clipboard
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .projects: "项目"
+        case .clipboard: "剪贴板"
+        }
+    }
+}
+
 enum GlobalShortcut: String, Codable, CaseIterable, Identifiable, Sendable {
     case optionSpace
+    case optionShiftSpace
     case commandShiftSpace
     case controlOptionSpace
 
@@ -70,6 +97,7 @@ enum GlobalShortcut: String, Codable, CaseIterable, Identifiable, Sendable {
     var displayName: String {
         switch self {
         case .optionSpace: "⌥ Space"
+        case .optionShiftSpace: "⌥ ⇧ Space"
         case .commandShiftSpace: "⌘ ⇧ Space"
         case .controlOptionSpace: "⌃ ⌥ Space"
         }
@@ -85,6 +113,8 @@ struct AppPreferences: Codable, Hashable, Sendable {
     var launchAtLogin: Bool = false
     var globalShortcutEnabled: Bool = true
     var globalShortcut: GlobalShortcut = .optionSpace
+    var clipboardHistoryEnabled: Bool = false
+    var clipboardHistoryLimit: Int = 100
 }
 
 struct AppData: Codable, Sendable {
@@ -92,6 +122,7 @@ struct AppData: Codable, Sendable {
     var projects: [ProjectRecord] = []
     var exclusionRules: [ExclusionRule] = []
     var editors: [EditorDefinition] = []
+    var clipboardItems: [ClipboardItem] = []
     var preferences = AppPreferences()
 }
 
@@ -120,6 +151,7 @@ extension AppPreferences {
         case defaultEditorBundleIdentifier, terminalBundleIdentifier, closeAfterOpening
         case previewDelayMilliseconds, automaticScanIntervalMinutes
         case launchAtLogin, globalShortcutEnabled, globalShortcut
+        case clipboardHistoryEnabled, clipboardHistoryLimit
     }
 
     init(from decoder: Decoder) throws {
@@ -133,12 +165,14 @@ extension AppPreferences {
         launchAtLogin = try values.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
         globalShortcutEnabled = try values.decodeIfPresent(Bool.self, forKey: .globalShortcutEnabled) ?? true
         globalShortcut = try values.decodeIfPresent(GlobalShortcut.self, forKey: .globalShortcut) ?? .optionSpace
+        clipboardHistoryEnabled = try values.decodeIfPresent(Bool.self, forKey: .clipboardHistoryEnabled) ?? false
+        clipboardHistoryLimit = try values.decodeIfPresent(Int.self, forKey: .clipboardHistoryLimit) ?? 100
     }
 }
 
 extension AppData {
     private enum CodingKeys: String, CodingKey {
-        case scanRoots, projects, exclusionRules, editors, preferences
+        case scanRoots, projects, exclusionRules, editors, clipboardItems, preferences
     }
 
     init(from decoder: Decoder) throws {
@@ -147,6 +181,7 @@ extension AppData {
         projects = try values.decodeIfPresent([ProjectRecord].self, forKey: .projects) ?? []
         exclusionRules = try values.decodeIfPresent([ExclusionRule].self, forKey: .exclusionRules) ?? []
         editors = try values.decodeIfPresent([EditorDefinition].self, forKey: .editors) ?? []
+        clipboardItems = try values.decodeIfPresent([ClipboardItem].self, forKey: .clipboardItems) ?? []
         preferences = try values.decodeIfPresent(AppPreferences.self, forKey: .preferences) ?? AppPreferences()
     }
 }

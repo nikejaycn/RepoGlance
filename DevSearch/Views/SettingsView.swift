@@ -2,21 +2,59 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
+    @State private var selection: SettingsSection = .general
 
     var body: some View {
-        TabView {
-            GeneralSettingsView()
-                .tabItem { Label("通用", systemImage: "gearshape") }
-            ScanRootsSettingsView()
-                .tabItem { Label("扫描目录", systemImage: "folder") }
-            EditorSettingsView()
-                .tabItem { Label("编辑器", systemImage: "hammer") }
-            IndexSettingsView()
-                .tabItem { Label("索引与数据", systemImage: "externaldrive") }
-            AboutSettingsView()
-                .tabItem { Label("关于", systemImage: "info.circle") }
+        NavigationSplitView {
+            List(SettingsSection.allCases, selection: $selection) { section in
+                Label(section.title, systemImage: section.systemImage)
+                    .tag(section)
+            }
+            .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 240)
+        } detail: {
+            Group {
+                switch selection {
+                case .general: GeneralSettingsView()
+                case .sources: ScanRootsSettingsView()
+                case .opening: EditorSettingsView()
+                case .clipboard: ClipboardSettingsView()
+                case .data: IndexSettingsView()
+                }
+            }
+            .padding(20)
+            .navigationTitle(selection.title)
         }
-        .padding(16)
+        .navigationSplitViewStyle(.balanced)
+    }
+}
+
+private enum SettingsSection: String, CaseIterable, Identifiable {
+    case general
+    case sources
+    case opening
+    case clipboard
+    case data
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .general: "通用"
+        case .sources: "项目来源"
+        case .opening: "打开方式"
+        case .clipboard: "剪贴板"
+        case .data: "数据与关于"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .general: "gearshape"
+        case .sources: "folder"
+        case .opening: "command"
+        case .clipboard: "clipboard"
+        case .data: "externaldrive"
+        }
     }
 }
 
@@ -28,7 +66,7 @@ private struct GeneralSettingsView: View {
             Toggle("登录时启动", isOn: launchAtLoginBinding)
             Toggle("启用全局快捷键", isOn: preferenceBinding(\.globalShortcutEnabled))
             Picker("快捷键", selection: preferenceBinding(\.globalShortcut)) {
-                ForEach(GlobalShortcut.allCases) { shortcut in
+                ForEach(GlobalShortcut.allCases.filter { $0 != .optionShiftSpace }) { shortcut in
                     Text(shortcut.displayName).tag(shortcut)
                 }
             }
@@ -45,10 +83,6 @@ private struct GeneralSettingsView: View {
                 Text("每 15 分钟").tag(15)
                 Text("每 30 分钟").tag(30)
                 Text("每 60 分钟").tag(60)
-            }
-            Picker("终端应用", selection: preferenceBinding(\.terminalBundleIdentifier)) {
-                Text("终端").tag("com.apple.Terminal")
-                Text("iTerm").tag("com.googlecode.iterm2")
             }
         }
         .formStyle(.grouped)
@@ -78,6 +112,59 @@ private struct GeneralSettingsView: View {
             set: { value in
                 var preferences = model.data.preferences
                 preferences[keyPath: keyPath] = value
+                model.updatePreferences(preferences)
+            }
+        )
+    }
+}
+
+private struct ClipboardSettingsView: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var confirmClear = false
+
+    var body: some View {
+        Form {
+            Toggle("记录文本剪贴板历史", isOn: enabledBinding)
+            Picker("最多保留", selection: limitBinding) {
+                Text("50 条").tag(50)
+                Text("100 条").tag(100)
+                Text("200 条").tag(200)
+                Text("500 条").tag(500)
+            }
+            LabeledContent("专用快捷键", value: "⌥ ⇧ Space")
+            LabeledContent("当前记录", value: "\(model.data.clipboardItems.count) 条")
+            HStack {
+                Button("打开剪贴板") {
+                    SearchWindowCoordinator.shared.show(model: model, mode: .clipboard)
+                }
+                Button("清空历史…", role: .destructive) { confirmClear = true }
+                    .disabled(model.data.clipboardItems.isEmpty)
+            }
+            Section {
+                Text("仅记录启用后新复制的纯文本，数据只保存在本机。标记为临时、隐藏或密码内容的剪贴板条目不会被记录；单条文本最大 100 KB。")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .confirmationDialog("清空剪贴板历史？", isPresented: $confirmClear) {
+            Button("清空历史", role: .destructive) { model.clearClipboardHistory() }
+            Button("取消", role: .cancel) {}
+        }
+    }
+
+    private var enabledBinding: Binding<Bool> {
+        Binding(
+            get: { model.data.preferences.clipboardHistoryEnabled },
+            set: { model.setClipboardHistoryEnabled($0) }
+        )
+    }
+
+    private var limitBinding: Binding<Int> {
+        Binding(
+            get: { model.data.preferences.clipboardHistoryLimit },
+            set: { value in
+                var preferences = model.data.preferences
+                preferences.clipboardHistoryLimit = value
                 model.updatePreferences(preferences)
             }
         )
@@ -311,6 +398,11 @@ private struct EditorSettingsView: View {
                 }
             }
 
+            Picker("终端应用", selection: terminalBinding) {
+                Text("终端").tag("com.apple.Terminal")
+                Text("iTerm").tag("com.googlecode.iterm2")
+            }
+
             Section("已发现的编辑器") {
                 if model.data.editors.isEmpty {
                     Text("没有发现支持的编辑器").foregroundStyle(.secondary)
@@ -351,6 +443,17 @@ private struct EditorSettingsView: View {
             set: { model.setDefaultEditor($0) }
         )
     }
+
+    private var terminalBinding: Binding<String> {
+        Binding(
+            get: { model.data.preferences.terminalBundleIdentifier },
+            set: { value in
+                var preferences = model.data.preferences
+                preferences.terminalBundleIdentifier = value
+                model.updatePreferences(preferences)
+            }
+        )
+    }
 }
 
 private struct IndexSettingsView: View {
@@ -377,12 +480,25 @@ private struct IndexSettingsView: View {
             } footer: {
                 Text("重建索引会保留说明、标签和收藏；清除会删除扫描目录、索引、说明、标签、收藏和编辑器偏好。")
             }
+            Section("关于") {
+                LabeledContent("应用", value: "RepoGlance")
+                LabeledContent("版本", value: versionDescription)
+                Text("项目路径、README、说明和剪贴板历史只保存在本机。")
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .confirmationDialog("清除 Dev Search 的全部本地数据？", isPresented: $confirmClear) {
             Button("清除全部数据", role: .destructive) { Task { await model.clearAllData() } }
             Button("取消", role: .cancel) {}
         }
+    }
+
+    private var versionDescription: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? "—"
+        return "\(version)（\(build)）"
     }
 }
 
