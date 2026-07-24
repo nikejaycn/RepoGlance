@@ -3,7 +3,6 @@ import SwiftUI
 struct ProjectRowView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     let project: ProjectRecord
     let depth: Int
     let isSelected: Bool
@@ -79,7 +78,6 @@ struct ProjectRowView: View {
             .padding(.vertical, 9)
             .frame(minHeight: matchedExcerpt == nil ? 64 : 78)
             .contentShape(Rectangle())
-            .background(selectionBackground)
             .background(ScreenFrameReader { screenFrame = $0 })
         }
         .buttonStyle(.plain)
@@ -168,12 +166,6 @@ struct ProjectRowView: View {
         let parentName = model.data.projects.first { $0.id == parentID }?.name
             ?? URL(fileURLWithPath: parentID).lastPathComponent
         return "子仓库 · 位于 \(parentName)"
-    }
-
-    private var selectionBackground: Color {
-        guard isSelected else { return .clear }
-        let selection = Color(nsColor: .selectedContentBackgroundColor)
-        return selection.opacity(colorSchemeContrast == .increased ? 0.42 : 0.22)
     }
 
     private var hasChildren: Bool {

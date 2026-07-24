@@ -30,27 +30,46 @@ struct ProjectPreviewView: View {
             if let project {
                 VStack(spacing: 0) {
                     header(project)
+                        .padding(16)
+
                     Divider()
+
                     if hasBothSources(project) {
                         Picker("内容", selection: $selectedTab) {
                             ForEach(ContentTab.allCases) { tab in Text(tab.rawValue).tag(tab) }
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                        .padding(12)
                         .focused($focusedControl, equals: .contentPicker)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
                     }
-                    content(project)
+
+                    GroupBox(selectedTab.rawValue) {
+                        content(project)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                    .frame(maxHeight: .infinity)
+
                     Divider()
                     actions(project)
+                        .padding(12)
+                        .background(.bar)
                 }
             } else {
                 ContentUnavailableView("项目已不在索引中", systemImage: "folder.badge.questionmark")
+                    .padding(16)
             }
         }
         .frame(width: 420)
         .frame(minHeight: 420)
-        .background(.regularMaterial)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color(nsColor: .separatorColor).opacity(0.42), lineWidth: 0.5)
+        }
         .accessibilityIdentifier("project-preview")
         .accessibilityValue(focusContentOnAppear ? "交互预览" : "自动预览")
         .onAppear {
@@ -86,38 +105,21 @@ struct ProjectPreviewView: View {
             Button { model.toggleFavorite(project) } label: {
                 Image(systemName: project.isFavorite ? "star.fill" : "star")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
             .help(project.isFavorite ? "取消收藏" : "收藏")
             .accessibilityLabel(project.isFavorite ? "取消收藏 \(project.name)" : "收藏 \(project.name)")
         }
-        .padding(12)
     }
 
     @ViewBuilder
     private func previewTags(_ tags: [String]) -> some View {
         if !tags.isEmpty {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 5) {
-                    ForEach(tags.prefix(2), id: \.self) { tag in
-                        Text(tag)
-                            .font(.caption2)
-                            .lineLimit(1)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.quaternary, in: Capsule())
-                    }
-                    if tags.count > 2 { tagCount(tags.count - 2, prefix: "另外") }
-                }
-                tagCount(tags.count, prefix: "共")
-            }
+            Label(tags.joined(separator: " · "), systemImage: "tag")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .help(tags.joined(separator: "、"))
         }
-    }
-
-    private func tagCount(_ count: Int, prefix: String) -> some View {
-        Text("\(count) 个标签")
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .accessibilityLabel("\(prefix) \(count) 个标签")
     }
 
     @ViewBuilder
@@ -136,7 +138,7 @@ struct ProjectPreviewView: View {
             ScrollView {
                 LimitedMarkdownText(markdown: markdown)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
+                    .padding(8)
                 if selectedTab == .readme, project.readmeWasTruncated {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("仅显示 README 开头 20 KB")
@@ -146,8 +148,8 @@ struct ProjectPreviewView: View {
                             .buttonStyle(.link)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 12)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 8)
                 }
             }
             .accessibilityLabel(selectedTab == .description ? "自定义说明内容" : "README 内容")
@@ -172,7 +174,6 @@ struct ProjectPreviewView: View {
                 editButton
             }
         }
-        .padding(12)
     }
 
     private func openButton(_ project: ProjectRecord) -> some View {
@@ -194,7 +195,6 @@ struct ProjectPreviewView: View {
 
     private var editButton: some View {
         Button("编辑项目信息…") { editProject() }
-            .buttonStyle(.link)
     }
 
     private func hasBothSources(_ project: ProjectRecord) -> Bool {

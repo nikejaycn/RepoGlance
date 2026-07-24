@@ -1,17 +1,42 @@
+import AppKit
 import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @State private var selection: SettingsSection = .general
+    @State private var query = ""
 
     var body: some View {
-        NavigationSplitView {
-            List(SettingsSection.allCases, selection: $selection) { section in
-                Label(section.title, systemImage: section.systemImage)
-                    .tag(section)
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                NativeSearchField(
+                    text: $query,
+                    placeholder: "搜索设置…",
+                    focusOnAppear: false,
+                    usesSidebarAppearance: true,
+                    preferredHeight: 28,
+                    accessibilityIdentifier: "settings-search-field"
+                )
+                .frame(height: 28)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 12)
+
+                List(filteredSections, selection: $selection) { section in
+                    Label(section.title, systemImage: section.systemImage)
+                        .tag(section)
+                }
+                .listStyle(.sidebar)
+                .overlay {
+                    if filteredSections.isEmpty {
+                        ContentUnavailableView.search(text: query)
+                    }
+                }
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 240)
-        } detail: {
+            .frame(width: 218)
+            .background(SidebarMaterialBackground())
+
+            Divider()
+
             Group {
                 switch selection {
                 case .general: GeneralSettingsView()
@@ -21,10 +46,35 @@ struct SettingsView: View {
                 case .data: IndexSettingsView()
                 }
             }
-            .padding(20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .navigationTitle(selection.title)
         }
-        .navigationSplitViewStyle(.balanced)
+        .onChange(of: query) { _, _ in
+            guard !filteredSections.contains(selection), let first = filteredSections.first else { return }
+            selection = first
+        }
+    }
+
+    private var filteredSections: [SettingsSection] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return SettingsSection.allCases }
+        return SettingsSection.allCases.filter { $0.matches(needle) }
+    }
+}
+
+private struct SidebarMaterialBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .withinWindow
+        view.state = .followsWindowActiveState
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        view.material = .sidebar
+        view.blendingMode = .withinWindow
+        view.state = .followsWindowActiveState
     }
 }
 
@@ -56,6 +106,23 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         case .data: "externaldrive"
         }
     }
+
+    func matches(_ query: String) -> Bool {
+        let searchableText: String
+        switch self {
+        case .general:
+            searchableText = "通用 登录 启动 快捷键 搜索面板 预览 扫描"
+        case .sources:
+            searchableText = "项目来源 扫描目录 隐藏目录 深度 忽略路径 排除项目"
+        case .opening:
+            searchableText = "打开方式 编辑器 Visual Studio Code Xcode Cursor Zed 终端"
+        case .clipboard:
+            searchableText = "剪贴板 历史 保留 快捷键 清空 本机"
+        case .data:
+            searchableText = "数据 关于 项目总数 顶层仓库 嵌套仓库 索引 导入 导出 版本"
+        }
+        return searchableText.localizedCaseInsensitiveContains(query)
+    }
 }
 
 private struct GeneralSettingsView: View {
@@ -63,26 +130,35 @@ private struct GeneralSettingsView: View {
 
     var body: some View {
         Form {
-            Toggle("登录时启动", isOn: launchAtLoginBinding)
-            Toggle("启用全局快捷键", isOn: preferenceBinding(\.globalShortcutEnabled))
-            Picker("快捷键", selection: preferenceBinding(\.globalShortcut)) {
-                ForEach(GlobalShortcut.allCases.filter { $0 != .optionShiftSpace }) { shortcut in
-                    Text(shortcut.displayName).tag(shortcut)
+            Section("启动与行为") {
+                Toggle("登录时启动", isOn: launchAtLoginBinding)
+                Toggle("启用全局快捷键", isOn: preferenceBinding(\.globalShortcutEnabled))
+                Toggle("打开项目后关闭搜索面板", isOn: preferenceBinding(\.closeAfterOpening))
+            }
+
+            Section("搜索与预览") {
+                Picker("快捷键", selection: preferenceBinding(\.globalShortcut)) {
+                    ForEach(GlobalShortcut.allCases.filter { $0 != .optionShiftSpace }) { shortcut in
+                        Text(shortcut.displayName).tag(shortcut)
+                    }
+                }
+                .disabled(!model.data.preferences.globalShortcutEnabled)
+
+                Picker("预览等待时间", selection: previewDelayBinding) {
+                    Text("快速（250 ms）").tag(250)
+                    Text("标准（400 ms）").tag(400)
+                    Text("较慢（600 ms）").tag(600)
                 }
             }
-            .disabled(!model.data.preferences.globalShortcutEnabled)
-            Toggle("打开项目后关闭搜索面板", isOn: preferenceBinding(\.closeAfterOpening))
-            Picker("预览等待时间", selection: previewDelayBinding) {
-                Text("快速（250 ms）").tag(250)
-                Text("标准（400 ms）").tag(400)
-                Text("较慢（600 ms）").tag(600)
-            }
-            Picker("定时兜底扫描", selection: preferenceBinding(\.automaticScanIntervalMinutes)) {
-                Text("关闭（仍监听文件变化）").tag(0)
-                Text("每 5 分钟").tag(5)
-                Text("每 15 分钟").tag(15)
-                Text("每 30 分钟").tag(30)
-                Text("每 60 分钟").tag(60)
+
+            Section("索引更新") {
+                Picker("定时兜底扫描", selection: preferenceBinding(\.automaticScanIntervalMinutes)) {
+                    Text("关闭（仍监听文件变化）").tag(0)
+                    Text("每 5 分钟").tag(5)
+                    Text("每 15 分钟").tag(15)
+                    Text("每 30 分钟").tag(30)
+                    Text("每 60 分钟").tag(60)
+                }
             }
         }
         .formStyle(.grouped)
@@ -124,25 +200,34 @@ private struct ClipboardSettingsView: View {
 
     var body: some View {
         Form {
-            Toggle("记录文本剪贴板历史", isOn: enabledBinding)
-            Picker("最多保留", selection: limitBinding) {
-                Text("50 条").tag(50)
-                Text("100 条").tag(100)
-                Text("200 条").tag(200)
-                Text("500 条").tag(500)
-            }
-            LabeledContent("专用快捷键", value: "⌥ ⇧ Space")
-            LabeledContent("当前记录", value: "\(model.data.clipboardItems.count) 条")
-            HStack {
-                Button("打开剪贴板") {
-                    SearchWindowCoordinator.shared.show(model: model, mode: .clipboard)
+            Section("剪贴板历史") {
+                Toggle("记录文本剪贴板历史", isOn: enabledBinding)
+                Picker("最多保留", selection: limitBinding) {
+                    Text("50 条").tag(50)
+                    Text("100 条").tag(100)
+                    Text("200 条").tag(200)
+                    Text("500 条").tag(500)
                 }
-                Button("清空历史…", role: .destructive) { confirmClear = true }
-                    .disabled(model.data.clipboardItems.isEmpty)
+                LabeledContent("专用快捷键", value: "⌥ ⇧ Space")
+                LabeledContent("当前记录", value: "\(model.data.clipboardItems.count) 条")
+
+                HStack {
+                    Button("打开剪贴板") {
+                        SearchWindowCoordinator.shared.show(model: model, mode: .clipboard)
+                    }
+                    Button("清空历史…", role: .destructive) { confirmClear = true }
+                        .disabled(model.data.clipboardItems.isEmpty)
+                }
             }
-            Section {
-                Text("仅记录启用后新复制的纯文本，数据只保存在本机。标记为临时、隐藏或密码内容的剪贴板条目不会被记录；单条文本最大 100 KB。")
-                    .foregroundStyle(.secondary)
+
+            Section("隐私") {
+                Label {
+                    Text("仅记录启用后新复制的纯文本，数据只保存在本机。标记为临时、隐藏或密码内容的剪贴板条目不会被记录；单条文本最大 100 KB。")
+                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "lock")
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)
@@ -176,34 +261,29 @@ private struct ScanRootsSettingsView: View {
     @State private var rootPendingRemoval: ScanRoot?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("扫描目录").font(.title2.weight(.semibold))
-                Spacer()
-                Button("添加目录…") { model.chooseAndAddScanRoot() }
-            }
-
-            if model.data.scanRoots.isEmpty {
-                ContentUnavailableView("没有扫描目录", systemImage: "folder.badge.plus")
-            } else {
-                List {
+        Form {
+            Section("扫描目录") {
+                if model.data.scanRoots.isEmpty {
+                    ContentUnavailableView {
+                        Label("没有扫描目录", systemImage: "folder.badge.plus")
+                    } description: {
+                        Text("添加一个或多个开发目录后，RepoGlance 会自动发现其中的 Git 仓库。")
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 160)
+                } else {
                     ForEach(model.data.scanRoots) { root in
                         DisclosureGroup {
-                            Form {
-                                Toggle("扫描隐藏目录", isOn: rootOptionBinding(root, keyPath: \.scanHiddenDirectories))
-                                Stepper(
-                                    "最大扫描深度：\(currentRoot(root).maximumDepth)",
-                                    value: rootOptionBinding(root, keyPath: \.maximumDepth),
-                                    in: 1...128
-                                )
-                                TextField("忽略目录名（逗号分隔）", text: ignoredNamesBinding(root))
-                                    .onSubmit { model.startScan() }
-                                TextField("忽略相对路径（逗号分隔）", text: ignoredPathsBinding(root))
-                                    .help("相对于扫描目录，例如 archive/legacy；同时忽略其下所有内容")
-                                    .onSubmit { model.startScan() }
-                            }
-                            .formStyle(.grouped)
-                            .padding(.top, 4)
+                            Toggle("扫描隐藏目录", isOn: rootOptionBinding(root, keyPath: \.scanHiddenDirectories))
+                            Stepper(
+                                "最大扫描深度：\(currentRoot(root).maximumDepth)",
+                                value: rootOptionBinding(root, keyPath: \.maximumDepth),
+                                in: 1...128
+                            )
+                            TextField("忽略目录名（逗号分隔）", text: ignoredNamesBinding(root))
+                                .onSubmit { model.startScan() }
+                            TextField("忽略相对路径（逗号分隔）", text: ignoredPathsBinding(root))
+                                .help("相对于扫描目录，例如 archive/legacy；同时忽略其下所有内容")
+                                .onSubmit { model.startScan() }
                         } label: {
                             HStack {
                                 Toggle("", isOn: rootEnabledBinding(root))
@@ -225,62 +305,63 @@ private struct ScanRootsSettingsView: View {
                                 Button(role: .destructive) { rootPendingRemoval = root } label: {
                                     Image(systemName: "minus.circle")
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.borderless)
                                 .accessibilityLabel("移除扫描目录 \(root.displayPath)")
                             }
                         }
-                        .padding(.vertical, 4)
                     }
+                }
+
+                Button("添加目录…", systemImage: "plus") {
+                    model.chooseAndAddScanRoot()
                 }
             }
 
             if !model.scanIssues.isEmpty {
-                GroupBox("扫描问题") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(model.scanIssues) { issue in
-                            HStack {
-                                Image(systemName: "exclamationmark.triangle")
+                Section("扫描问题") {
+                    ForEach(model.scanIssues) { issue in
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle")
+                                .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(scanIssueTitle(issue))
+                                Text(issue.path)
+                                    .font(.caption.monospaced())
                                     .foregroundStyle(.secondary)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(scanIssueTitle(issue))
-                                    Text(issue.path)
-                                        .font(.caption.monospaced())
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                                Spacer()
-                                if let root = model.data.scanRoots.first(where: { $0.canonicalPath == issue.rootPath }) {
-                                    Button("重新选择…") { model.chooseReplacement(for: root) }
-                                }
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            if let root = model.data.scanRoots.first(where: { $0.canonicalPath == issue.rootPath }) {
+                                Button("重新选择…") { model.chooseReplacement(for: root) }
                             }
                         }
                     }
-                    .padding(8)
                 }
             }
 
-            Divider()
-            HStack {
-                Text("已排除项目").font(.headline)
-                Spacer()
-            }
-            if model.data.exclusionRules.isEmpty {
-                Text("没有排除规则").foregroundStyle(.secondary)
-            } else {
-                List(model.data.exclusionRules) { rule in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(URL(fileURLWithPath: rule.canonicalPath).lastPathComponent)
-                            Text(rule.canonicalPath).font(.caption.monospaced()).foregroundStyle(.secondary)
+            Section("已排除项目") {
+                if model.data.exclusionRules.isEmpty {
+                    Text("没有排除规则").foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.data.exclusionRules) { rule in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(URL(fileURLWithPath: rule.canonicalPath).lastPathComponent)
+                                Text(rule.canonicalPath)
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(rule.includesDescendants ? "包含子项目" : "仅当前项目")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Button("恢复") { model.restoreExclusion(rule) }
                         }
-                        Spacer()
-                        Text(rule.includesDescendants ? "包含子项目" : "仅当前项目")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Button("恢复") { model.restoreExclusion(rule) }
                     }
                 }
             }
         }
+        .formStyle(.grouped)
         .confirmationDialog("移除扫描目录？", isPresented: removalDialogBinding) {
             if let root = rootPendingRemoval {
                 Button("移除并保留项目说明") { model.removeScanRoot(root); rootPendingRemoval = nil }
@@ -391,21 +472,26 @@ private struct EditorSettingsView: View {
 
     var body: some View {
         Form {
-            Picker("全局默认编辑器", selection: defaultEditorBinding) {
-                Text("未选择").tag(String?.none)
-                ForEach(model.data.editors) { editor in
-                    Text(editor.name).tag(Optional(editor.bundleIdentifier))
+            Section("默认打开方式") {
+                Picker("全局默认编辑器", selection: defaultEditorBinding) {
+                    Text("未选择").tag(String?.none)
+                    ForEach(model.data.editors) { editor in
+                        Text(editor.name).tag(Optional(editor.bundleIdentifier))
+                    }
                 }
-            }
-
-            Picker("终端应用", selection: terminalBinding) {
-                Text("终端").tag("com.apple.Terminal")
-                Text("iTerm").tag("com.googlecode.iterm2")
+                Picker("终端应用", selection: terminalBinding) {
+                    Text("终端").tag("com.apple.Terminal")
+                    Text("iTerm").tag("com.googlecode.iterm2")
+                }
             }
 
             Section("已发现的编辑器") {
                 if model.data.editors.isEmpty {
-                    Text("没有发现支持的编辑器").foregroundStyle(.secondary)
+                    ContentUnavailableView(
+                        "没有发现支持的编辑器",
+                        systemImage: "app.dashed"
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 140)
                 } else {
                     ForEach(model.data.editors) { editor in
                         HStack {
@@ -425,14 +511,17 @@ private struct EditorSettingsView: View {
                                 Button(role: .destructive) { model.removeEditor(editor) } label: {
                                     Image(systemName: "minus.circle")
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.borderless)
                                 .accessibilityLabel("移除编辑器 \(editor.name)")
                             }
                         }
                     }
                 }
+
+                Button("添加其他应用…", systemImage: "plus") {
+                    model.chooseAndAddEditor()
+                }
             }
-            Button("添加其他应用…") { model.chooseAndAddEditor() }
         }
         .formStyle(.grouped)
     }
@@ -462,29 +551,42 @@ private struct IndexSettingsView: View {
 
     var body: some View {
         Form {
-            LabeledContent("项目总数", value: "\(model.data.projects.count)")
-            LabeledContent("顶层仓库", value: "\(model.data.projects.filter { !$0.isNested }.count)")
-            LabeledContent("嵌套仓库", value: "\(model.data.projects.filter(\.isNested).count)")
-            LabeledContent("失效路径", value: "\(model.data.projects.filter { $0.availability != .available }.count)")
-            HStack {
-                Button("立即扫描") { model.startScan() }
-                Button("重建索引（保留说明）") { model.startScan() }
-                if model.isScanning { Button("停止") { model.cancelScan() } }
+            Section("索引") {
+                LabeledContent("项目总数", value: "\(model.data.projects.count)")
+                LabeledContent("顶层仓库", value: "\(model.data.projects.filter { !$0.isNested }.count)")
+                LabeledContent("嵌套仓库", value: "\(model.data.projects.filter(\.isNested).count)")
+                LabeledContent(
+                    "失效路径",
+                    value: "\(model.data.projects.filter { $0.availability != .available }.count)"
+                )
             }
-            HStack {
-                Button("导出数据…") { model.exportCustomData() }
-                Button("导入数据…") { model.importCustomData() }
-            }
-            Section {
+
+            Section("维护") {
+                HStack {
+                    Button("立即扫描") { model.startScan() }
+                    Button("重建索引（保留说明）") { model.startScan() }
+                    if model.isScanning {
+                        Button("停止", role: .cancel) { model.cancelScan() }
+                    }
+                }
+                HStack {
+                    Button("导出数据…") { model.exportCustomData() }
+                    Button("导入数据…") { model.importCustomData() }
+                }
                 Button("清除全部数据…", role: .destructive) { confirmClear = true }
-            } footer: {
                 Text("重建索引会保留说明、标签和收藏；清除会删除扫描目录、索引、说明、标签、收藏和编辑器偏好。")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
             }
+
             Section("关于") {
                 LabeledContent("应用", value: "RepoGlance")
                 LabeledContent("版本", value: versionDescription)
-                Text("项目路径、README、说明和剪贴板历史只保存在本机。")
-                    .foregroundStyle(.secondary)
+                Label(
+                    "项目路径、README、说明和剪贴板历史只保存在本机。",
+                    systemImage: "lock"
+                )
+                .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -499,30 +601,5 @@ private struct IndexSettingsView: View {
         let version = info?["CFBundleShortVersionString"] as? String ?? "—"
         let build = info?["CFBundleVersion"] as? String ?? "—"
         return "\(version)（\(build)）"
-    }
-}
-
-private struct AboutSettingsView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 48))
-            Text("RepoGlance").font(.title2.weight(.semibold))
-            Text(versionDescription)
-                .foregroundStyle(.secondary)
-            Text("项目路径、README 和自定义说明只保存在本机。")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 380)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var versionDescription: String {
-        let info = Bundle.main.infoDictionary
-        let version = info?["CFBundleShortVersionString"] as? String ?? "—"
-        let build = info?["CFBundleVersion"] as? String ?? "—"
-        return "版本 \(version)（\(build)）"
     }
 }

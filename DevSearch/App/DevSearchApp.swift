@@ -16,6 +16,18 @@ final class DevSearchApplicationDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             await model.start()
         }
+
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--show-settings") {
+            Task { @MainActor in
+                await Task.yield()
+                NSApp.activate(ignoringOtherApps: true)
+                if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
+                    NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+                }
+            }
+        }
+#endif
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -131,7 +143,7 @@ struct DevSearchApp: App {
             ProjectEditorHostView()
                 .environmentObject(model)
         }
-        .defaultSize(width: 560, height: 480)
+        .defaultSize(width: 680, height: 620)
         .windowResizability(.contentSize)
     }
 }

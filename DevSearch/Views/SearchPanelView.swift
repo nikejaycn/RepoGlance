@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SearchPanelView: View {
@@ -23,6 +24,12 @@ struct SearchPanelView: View {
         }
         .frame(width: 560)
         .frame(minHeight: 420, maxHeight: 704)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(.separator.opacity(0.42), lineWidth: 0.5)
+        }
         .onChange(of: model.query) { _, _ in
             projectSelectionIndex = 0
             syncProjectSelection()
@@ -40,6 +47,26 @@ struct SearchPanelView: View {
         .onAppear {
             if model.quickPanelMode == .projects { syncProjectSelection() }
             else { syncClipboardSelection() }
+#if DEBUG
+            if
+                ProcessInfo.processInfo.arguments.contains("--show-preview"),
+                let project = selectableProjects.first
+            {
+                DispatchQueue.main.async {
+                    model.selectedProjectID = project.id
+                    PreviewPanelCoordinator.shared.enter(project: project, model: model)
+                }
+            } else if
+                ProcessInfo.processInfo.arguments.contains("--show-project-editor"),
+                let project = selectableProjects.first
+            {
+                DispatchQueue.main.async {
+                    model.editingProjectID = project.id
+                    SearchWindowCoordinator.shared.hide()
+                    openWindow(id: "project-editor")
+                }
+            }
+#endif
         }
         .alert("RepoGlance", isPresented: errorBinding) {
             Button("好", role: .cancel) { model.presentedError = nil }
@@ -73,12 +100,14 @@ struct SearchPanelView: View {
 
             if model.quickPanelMode == .clipboard {
                 HStack(spacing: 6) {
-                    Circle()
-                        .fill(model.data.preferences.clipboardHistoryEnabled ? .green : .secondary)
-                        .frame(width: 7, height: 7)
-                    Text(model.data.preferences.clipboardHistoryEnabled ? "记录中" : "已暂停")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Label(
+                        model.data.preferences.clipboardHistoryEnabled ? "记录中" : "已暂停",
+                        systemImage: model.data.preferences.clipboardHistoryEnabled
+                            ? "record.circle.fill"
+                            : "pause.circle"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.trailing, 16)
@@ -94,6 +123,7 @@ struct SearchPanelView: View {
             placeholder: model.quickPanelMode == .projects
                 ? "搜索项目、路径、说明或标签…"
                 : "搜索剪贴板文本…",
+            isEnabled: model.quickPanelMode == .clipboard || !model.data.scanRoots.isEmpty,
             onMoveUp: { moveSelection(.up) },
             onMoveDown: { moveSelection(.down) },
             onSubmit: performPrimaryAction,
@@ -141,6 +171,7 @@ struct SearchPanelView: View {
                 Button("选择扫描文件夹…") { model.chooseAndAddScanRoot() }
             }
             .frame(maxHeight: .infinity)
+            .padding()
         } else if !model.query.isEmpty && model.visibleProjects.isEmpty && !model.isScanning {
             ContentUnavailableView {
                 Label("没有找到“\(model.query)”", systemImage: "magnifyingglass")
@@ -151,40 +182,41 @@ struct SearchPanelView: View {
                 Button("重新扫描") { model.startScan() }
             }
             .frame(maxHeight: .infinity)
+            .padding()
         } else {
             projectList
         }
     }
 
     private var projectList: some View {
-        ScrollView {
-            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                if model.query.isEmpty {
-                    if !model.recentProjects.isEmpty {
-                        projectSection(title: "最近使用", projects: Array(model.recentProjects.prefix(5)))
-                    }
-                    let recentIDs = Set(model.recentProjects.prefix(5).map(\.id))
-                    let favorites = model.favoriteProjects.filter { !recentIDs.contains($0.id) }
-                    if !favorites.isEmpty {
-                        projectSection(title: "收藏", projects: Array(favorites.prefix(5)))
-                    }
-                    if model.recentProjects.isEmpty && favorites.isEmpty {
-                        projectSection(title: "项目", projects: Array(model.indexedProjects.prefix(12)))
-                    }
-                } else {
-                    projectSection(
-                        title: "结果 \(model.visibleProjects.count)",
-                        projects: Array(model.visibleProjects.prefix(200)),
-                        excerpts: Dictionary(
-                            model.searchMatches.compactMap { match in
-                                match.matchedExcerpt.map { (match.id, $0) }
-                            },
-                            uniquingKeysWith: { _, last in last }
-                        )
-                    )
+        List(selection: $model.selectedProjectID) {
+            if model.query.isEmpty {
+                if !model.recentProjects.isEmpty {
+                    projectSection(title: "最近使用", projects: Array(model.recentProjects.prefix(5)))
                 }
+                let recentIDs = Set(model.recentProjects.prefix(5).map(\.id))
+                let favorites = model.favoriteProjects.filter { !recentIDs.contains($0.id) }
+                if !favorites.isEmpty {
+                    projectSection(title: "收藏", projects: Array(favorites.prefix(5)))
+                }
+                if model.recentProjects.isEmpty && favorites.isEmpty {
+                    projectSection(title: "项目", projects: Array(model.indexedProjects.prefix(12)))
+                }
+            } else {
+                projectSection(
+                    title: "结果 \(model.visibleProjects.count)",
+                    projects: Array(model.visibleProjects.prefix(200)),
+                    excerpts: Dictionary(
+                        model.searchMatches.compactMap { match in
+                            match.matchedExcerpt.map { (match.id, $0) }
+                        },
+                        uniquingKeysWith: { _, last in last }
+                    )
+                )
             }
         }
+        .listStyle(.inset)
+        .scrollContentBackground(.hidden)
         .frame(maxHeight: .infinity)
         .accessibilityIdentifier("projectResults")
     }
@@ -194,7 +226,7 @@ struct SearchPanelView: View {
         projects: [ProjectRecord],
         excerpts: [String: String] = [:]
     ) -> some View {
-        Section {
+        Section(title) {
             ForEach(projects) { project in
                 ProjectRowView(
                     project: project,
@@ -202,18 +234,8 @@ struct SearchPanelView: View {
                     isSelected: model.selectedProjectID == project.id,
                     matchedExcerpt: excerpts[project.id]
                 )
-                Divider().padding(.leading, 44)
+                .tag(project.id)
             }
-        } header: {
-            HStack {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .frame(height: 28)
-            .background(.bar)
         }
     }
 
@@ -228,42 +250,37 @@ struct SearchPanelView: View {
                 Button("启用剪贴板记录") { model.setClipboardHistoryEnabled(true) }
             }
             .frame(maxHeight: .infinity)
+            .padding()
         } else if model.visibleClipboardItems.isEmpty {
             ContentUnavailableView(
                 model.clipboardQuery.isEmpty ? "还没有剪贴板记录" : "没有匹配内容",
                 systemImage: "clipboard"
             )
             .frame(maxHeight: .infinity)
+            .padding()
         } else {
             clipboardList
         }
     }
 
     private var clipboardList: some View {
-        ScrollView {
-            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                ForEach(Array(model.visibleClipboardItems.enumerated()), id: \.element.id) { index, item in
-                    if shouldShowDateHeader(at: index) {
-                        HStack {
-                            Text(dateSectionTitle(item.copiedAt))
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 16)
-                        .frame(height: 28)
-                        .background(.bar)
+        List(selection: $model.selectedClipboardItemID) {
+            ForEach(Array(clipboardGroups.enumerated()), id: \.offset) { _, items in
+                Section(dateSectionTitle(items[0].copiedAt)) {
+                    ForEach(items) { item in
+                        ClipboardQuickRow(
+                            item: item,
+                            isSelected: model.selectedClipboardItemID == item.id,
+                            onCopy: { copyClipboardItem(item, close: true) },
+                            onDelete: { deleteClipboardItem(item) }
+                        )
+                        .tag(item.id)
                     }
-                    ClipboardQuickRow(
-                        item: item,
-                        isSelected: model.selectedClipboardItemID == item.id,
-                        onCopy: { copyClipboardItem(item, close: true) },
-                        onDelete: { deleteClipboardItem(item) }
-                    )
-                    Divider().padding(.leading, 16)
                 }
             }
         }
+        .listStyle(.inset)
+        .scrollContentBackground(.hidden)
         .frame(maxHeight: .infinity)
         .accessibilityIdentifier("clipboardHistoryList")
     }
@@ -512,6 +529,17 @@ struct SearchPanelView: View {
         return !Calendar.current.isDate(items[index].copiedAt, inSameDayAs: items[index - 1].copiedAt)
     }
 
+    private var clipboardGroups: [[ClipboardItem]] {
+        model.visibleClipboardItems.reduce(into: [[ClipboardItem]]()) { groups, item in
+            if let last = groups.last?.last,
+               Calendar.current.isDate(last.copiedAt, inSameDayAs: item.copiedAt) {
+                groups[groups.count - 1].append(item)
+            } else {
+                groups.append([item])
+            }
+        }
+    }
+
     private func dateSectionTitle(_ date: Date) -> String {
         if Calendar.current.isDateInToday(date) { return "今天" }
         if Calendar.current.isDateInYesterday(date) { return "昨天" }
@@ -558,7 +586,7 @@ private struct ClipboardQuickRow: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(metadata)
                         .font(.caption)
-                        .foregroundStyle(isSelected ? .white.opacity(0.75) : .secondary)
+                        .foregroundStyle(.secondary)
                 }
                 .contentShape(Rectangle())
             }
@@ -577,9 +605,7 @@ private struct ClipboardQuickRow: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 11)
         .frame(minHeight: 68)
-        .background(isSelected ? Color.accentColor : .clear, in: RoundedRectangle(cornerRadius: 10))
-        .foregroundStyle(isSelected ? Color.white : Color.primary)
-        .padding(.horizontal, 6)
+        .foregroundStyle(.primary)
         .onHover { isHovering = $0 }
         .contextMenu {
             Button("复制并关闭", action: onCopy)
@@ -594,5 +620,33 @@ private struct ClipboardQuickRow: View {
         let lineCount = max(1, item.text.split(separator: "\n", omittingEmptySubsequences: false).count)
         let countDescription = lineCount > 1 ? "\(lineCount) 行" : "\(item.text.count) 个字符"
         return "\(item.copiedAt.formatted(.relative(presentation: .named))) · \(countDescription)"
+    }
+}
+
+struct WindowMaterialBackground: NSViewRepresentable {
+    var material: NSVisualEffectView.Material = .underWindowBackground
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = WindowMaterialEffectView()
+        view.material = material
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        view.material = material
+        view.blendingMode = .behindWindow
+        view.state = .active
+    }
+}
+
+private final class WindowMaterialEffectView: NSVisualEffectView {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let window else { return }
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.titlebarAppearsTransparent = true
     }
 }

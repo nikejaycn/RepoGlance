@@ -2,8 +2,11 @@
 .build/
 DerivedData/
 .codex-derived/
+.codex-derived-data/
 .codex-release-derived/
 .codex-ui-derived/
+.codex-ui-derived-*/
+.codex-ui-native-derived/
 *.xcresult
 *.xcuserstate
 xcuserdata/

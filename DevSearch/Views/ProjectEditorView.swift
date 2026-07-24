@@ -42,101 +42,85 @@ struct ProjectEditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    GroupBox {
-                        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 12) {
-                            GridRow {
-                                fieldLabel("项目路径")
-                                HStack {
-                                    Text((project.canonicalPath as NSString).abbreviatingWithTildeInPath)
-                                        .font(.body.monospaced())
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                        .textSelection(.enabled)
-                                    Spacer()
-                                    Button { model.copyPath(project) } label: {
-                                        Image(systemName: "doc.on.doc")
-                                    }
-                                    .help("复制路径")
-                                    .accessibilityLabel("复制项目路径")
-                                    Button { model.revealInFinder(project) } label: {
-                                        Image(systemName: "folder")
-                                    }
-                                    .help("在 Finder 中显示")
-                                    .accessibilityLabel("在 Finder 中显示项目")
-                                }
+            Form {
+                Section("项目") {
+                    LabeledContent("项目路径") {
+                        HStack {
+                            Text((project.canonicalPath as NSString).abbreviatingWithTildeInPath)
+                                .font(.body.monospaced())
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .textSelection(.enabled)
+                            Button { model.copyPath(project) } label: {
+                                Image(systemName: "doc.on.doc")
                             }
-                            if let parentID = project.parentProjectID {
-                                GridRow {
-                                    fieldLabel("父项目")
-                                    Text(parentName(parentID))
-                                }
+                            .buttonStyle(.borderless)
+                            .help("复制路径")
+                            .accessibilityLabel("复制项目路径")
+                            Button { model.revealInFinder(project) } label: {
+                                Image(systemName: "folder")
                             }
-                            GridRow {
-                                fieldLabel("显示名称")
-                                TextField("留空时使用目录名", text: $displayName)
-                                    .accessibilityIdentifier("project-display-name")
-                            }
-                            GridRow {
-                                fieldLabel("标签")
-                                TextField("使用逗号分隔", text: $tagText)
-                                    .accessibilityIdentifier("project-tags")
-                            }
-                            GridRow {
-                                fieldLabel("默认编辑器")
-                                Picker("默认编辑器", selection: $editorBundleIdentifier) {
-                                    Text("继承全局设置").tag(String?.none)
-                                    ForEach(model.data.editors) { editor in
-                                        Text(editor.name).tag(Optional(editor.bundleIdentifier))
-                                    }
-                                }
-                                .labelsHidden()
-                            }
+                            .buttonStyle(.borderless)
+                            .help("在 Finder 中显示")
+                            .accessibilityLabel("在 Finder 中显示项目")
                         }
                     }
-
-                    GroupBox {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Markdown 编辑")
-                                    .font(.caption.weight(.semibold))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                Text("预览").font(.caption.weight(.semibold))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.leading, 8)
-                            }
-                            HStack(spacing: 0) {
-                                TextEditor(text: $description)
-                                    .font(.body.monospaced())
-                                    .frame(maxWidth: .infinity, minHeight: 230)
-                                    .accessibilityLabel("自定义说明 Markdown 编辑")
-                                    .accessibilityIdentifier("project-description")
-                                Divider()
-                                ScrollView {
-                                    LimitedMarkdownText(markdown: description)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(8)
-                                }
-                                .frame(maxWidth: .infinity, minHeight: 230)
-                                .accessibilityLabel("自定义说明预览")
-                            }
-                            HStack {
-                                Text("支持受限 Markdown；不会加载远程图片或执行 HTML。")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                Text("\(description.count) / 10,000")
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundStyle(isDescriptionTooLong ? .red : .secondary)
-                            }
+                    if let parentID = project.parentProjectID {
+                        LabeledContent("父项目", value: parentName(parentID))
+                    }
+                    TextField("显示名称", text: $displayName, prompt: Text("留空时使用目录名"))
+                        .accessibilityIdentifier("project-display-name")
+                    TextField("标签", text: $tagText, prompt: Text("使用逗号分隔"))
+                        .accessibilityIdentifier("project-tags")
+                    Picker("默认编辑器", selection: $editorBundleIdentifier) {
+                        Text("继承全局设置").tag(String?.none)
+                        ForEach(model.data.editors) { editor in
+                            Text(editor.name).tag(Optional(editor.bundleIdentifier))
                         }
-                    } label: {
-                        Text("自定义说明")
                     }
                 }
-                .padding(16)
+
+                Section("自定义说明") {
+                    HSplitView {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Markdown 编辑")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextEditor(text: $description)
+                                .font(.body.monospaced())
+                                .frame(minWidth: 220, minHeight: 220)
+                                .accessibilityLabel("自定义说明 Markdown 编辑")
+                                .accessibilityIdentifier("project-description")
+                        }
+                        .padding(.top, 6)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("预览")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            ScrollView {
+                                LimitedMarkdownText(markdown: description)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(8)
+                            }
+                            .frame(minWidth: 220, minHeight: 220)
+                            .accessibilityLabel("自定义说明预览")
+                        }
+                        .padding(.top, 6)
+                    }
+                    .frame(minHeight: 220)
+
+                    LabeledContent {
+                        Text("\(description.count) / 10,000")
+                            .monospacedDigit()
+                            .foregroundStyle(isDescriptionTooLong ? .red : .secondary)
+                    } label: {
+                        Text("支持受限 Markdown；不会加载远程图片或执行 HTML。")
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
 
             Divider()
             HStack {
@@ -152,8 +136,10 @@ struct ProjectEditorView: View {
                     .accessibilityIdentifier("project-save")
             }
             .padding(12)
+            .background(.bar)
         }
-        .frame(width: 560, height: 480)
+        .frame(width: 680, height: 620)
+        .background(WindowMaterialBackground())
         .background(WindowCloseGuard(
             shouldPreventClose: { hasChanges && !allowWindowClose },
             onCloseAttempt: { showingDiscardConfirmation = true }
@@ -185,12 +171,6 @@ struct ProjectEditorView: View {
     }
 
     private var isDescriptionTooLong: Bool { description.count > 10_000 }
-
-    private func fieldLabel(_ title: String) -> some View {
-        Text(title)
-            .foregroundStyle(.secondary)
-            .frame(width: 76, alignment: .trailing)
-    }
 
     private func parentName(_ parentID: String) -> String {
         model.data.projects.first(where: { $0.id == parentID })?.name

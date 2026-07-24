@@ -67,6 +67,35 @@ final class DevSearchUITests: XCTestCase {
         XCTAssertTrue(app.menuButtons["其他方式"].exists)
     }
 
+    func testHIGLayoutAndSettingsSearch() {
+        let searchField = app.searchFields["search-field"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        XCTAssertTrue(projectButton(named: "WebApp").waitForExistence(timeout: 8))
+
+        let panelScreenshot = XCTAttachment(screenshot: app.screenshot())
+        panelScreenshot.name = "HIG project panel"
+        panelScreenshot.lifetime = .keepAlways
+        add(panelScreenshot)
+
+        searchField.typeKey(",", modifierFlags: .command)
+        let settingsSearch = app.searchFields["settings-search-field"]
+        XCTAssertTrue(settingsSearch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Hide Sidebar"].exists)
+        settingsSearch.click()
+        settingsSearch.typeText("剪贴板")
+
+        XCTAssertTrue(app.staticTexts["剪贴板"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["项目来源"].exists)
+        XCTAssertFalse(app.staticTexts["打开方式"].exists)
+        app.staticTexts["剪贴板"].click()
+        XCTAssertTrue(app.staticTexts["记录文本剪贴板历史"].waitForExistence(timeout: 3))
+
+        let settingsScreenshot = XCTAttachment(screenshot: app.screenshot())
+        settingsScreenshot.name = "HIG settings search"
+        settingsScreenshot.lifetime = .keepAlways
+        add(settingsScreenshot)
+    }
+
     func testNonContiguousFuzzySearch() {
         let searchField = app.searchFields["search-field"]
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))

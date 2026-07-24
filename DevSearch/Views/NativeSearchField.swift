@@ -5,6 +5,10 @@ struct NativeSearchField: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
     var focusOnAppear = true
+    var isEnabled = true
+    var usesSidebarAppearance = false
+    var preferredHeight: CGFloat?
+    var accessibilityIdentifier = "search-field"
     var onMoveUp: () -> Void = {}
     var onMoveDown: () -> Void = {}
     var onSubmit: () -> Void = {}
@@ -25,14 +29,22 @@ struct NativeSearchField: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSSearchField {
         let field = ActionSearchField()
+        if usesSidebarAppearance {
+            field.cell = SidebarSearchFieldCell(textCell: "")
+        }
         field.placeholderString = placeholder
         field.sendsSearchStringImmediately = true
         field.delegate = context.coordinator
         field.target = context.coordinator
         field.action = #selector(Coordinator.valueChanged(_:))
         field.controlSize = .large
-        field.identifier = NSUserInterfaceItemIdentifier("search-field")
-        field.setAccessibilityIdentifier("search-field")
+        field.isEnabled = isEnabled
+        field.isEditable = true
+        field.isSelectable = true
+        field.identifier = NSUserInterfaceItemIdentifier(accessibilityIdentifier)
+        field.setAccessibilityRole(.textField)
+        field.setAccessibilitySubrole(.searchField)
+        field.setAccessibilityIdentifier(accessibilityIdentifier)
         field.onMoveUp = onMoveUp
         field.onMoveDown = onMoveDown
         field.onChooseOpeningMethod = onChooseOpeningMethod
@@ -59,6 +71,11 @@ struct NativeSearchField: NSViewRepresentable {
     func updateNSView(_ field: NSSearchField, context: Context) {
         if field.stringValue != text { field.stringValue = text }
         field.placeholderString = placeholder
+        field.isEnabled = isEnabled
+        field.identifier = NSUserInterfaceItemIdentifier(accessibilityIdentifier)
+        field.setAccessibilityRole(.textField)
+        field.setAccessibilitySubrole(.searchField)
+        field.setAccessibilityIdentifier(accessibilityIdentifier)
         context.coordinator.update(owner: self)
         guard let field = field as? ActionSearchField else { return }
         field.onMoveUp = onMoveUp
@@ -74,6 +91,18 @@ struct NativeSearchField: NSViewRepresentable {
         field.onCopySelection = onCopySelection
         field.onDeleteSelection = onDeleteSelection
         field.onClearClipboardHistory = onClearClipboardHistory
+    }
+
+    func sizeThatFits(
+        _ proposal: ProposedViewSize,
+        nsView: NSSearchField,
+        context: Context
+    ) -> CGSize? {
+        guard let preferredHeight else { return nil }
+        return CGSize(
+            width: proposal.width ?? nsView.intrinsicContentSize.width,
+            height: preferredHeight
+        )
     }
 
     @MainActor
@@ -167,6 +196,69 @@ struct NativeSearchField: NSViewRepresentable {
             }
             return true
         }
+    }
+}
+
+@MainActor
+private final class SidebarSearchFieldCell: NSSearchFieldCell {
+    override func searchTextRect(forBounds rect: NSRect) -> NSRect {
+        var textRect = super.searchTextRect(forBounds: rect)
+        let verticalGuide = super.searchButtonRect(forBounds: rect)
+        textRect.origin.y = verticalGuide.minY
+        textRect.size.height = verticalGuide.height
+        return textRect
+    }
+
+    override func draw(withFrame cellFrame: NSRect, in controlView: NSView) {
+        NSColor.quaternaryLabelColor.setFill()
+        NSBezierPath(
+            roundedRect: cellFrame.insetBy(dx: 0.5, dy: 0.5),
+            xRadius: 8,
+            yRadius: 8
+        ).fill()
+        drawInterior(withFrame: cellFrame, in: controlView)
+    }
+
+    override func edit(
+        withFrame rect: NSRect,
+        in controlView: NSView,
+        editor textObject: NSText,
+        delegate: Any?,
+        event: NSEvent?
+    ) {
+        super.edit(
+            withFrame: searchTextRect(forBounds: rect),
+            in: controlView,
+            editor: textObject,
+            delegate: delegate,
+            event: event
+        )
+    }
+
+    override func select(
+        withFrame rect: NSRect,
+        in controlView: NSView,
+        editor textObject: NSText,
+        delegate: Any?,
+        start selectionStart: Int,
+        length selectionLength: Int
+    ) {
+        super.select(
+            withFrame: searchTextRect(forBounds: rect),
+            in: controlView,
+            editor: textObject,
+            delegate: delegate,
+            start: selectionStart,
+            length: selectionLength
+        )
+    }
+
+    override func drawFocusRingMask(withFrame cellFrame: NSRect, in controlView: NSView) {
+        NSBezierPath(
+            roundedRect: cellFrame.insetBy(dx: 1, dy: 1),
+            xRadius: 8,
+            yRadius: 8
+        ).fill()
     }
 }
 

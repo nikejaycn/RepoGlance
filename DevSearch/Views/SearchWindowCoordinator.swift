@@ -47,6 +47,9 @@ final class SearchWindowCoordinator: NSObject, NSWindowDelegate {
             )
             created.titleVisibility = .hidden
             created.titlebarAppearsTransparent = true
+            created.isOpaque = false
+            created.backgroundColor = .clear
+            created.hasShadow = true
             created.isMovableByWindowBackground = false
             created.hidesOnDeactivate = !isUIAcceptanceMode
             created.level = .floating
