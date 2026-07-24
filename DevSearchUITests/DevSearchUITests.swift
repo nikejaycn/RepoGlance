@@ -96,6 +96,21 @@ final class DevSearchUITests: XCTestCase {
         add(settingsScreenshot)
     }
 
+    func testSettingsWindowOpensFromStartupArgument() {
+        app.terminate()
+        app = XCUIApplication()
+        app.launchArguments = [
+            "--show-settings",
+            "--test-storage", fixtureRoot.appendingPathComponent("settings-data.json").path
+        ]
+        app.launch()
+
+        let settingsSearch = app.searchFields["settings-search-field"]
+        XCTAssertTrue(settingsSearch.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.windows.firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["通用"].exists)
+    }
+
     func testNonContiguousFuzzySearch() {
         let searchField = app.searchFields["search-field"]
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))

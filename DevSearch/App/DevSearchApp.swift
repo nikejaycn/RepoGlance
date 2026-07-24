@@ -19,12 +19,10 @@ final class DevSearchApplicationDelegate: NSObject, NSApplicationDelegate {
 
 #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--show-settings") {
+            NSApp.setActivationPolicy(.regular)
             Task { @MainActor in
                 await Task.yield()
-                NSApp.activate(ignoringOtherApps: true)
-                if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
-                    NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-                }
+                SettingsWindowCoordinator.shared.show(model: model)
             }
         }
 #endif
@@ -111,10 +109,7 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func openSettings() {
-        NSApp.activate(ignoringOtherApps: true)
-        if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
-            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-        }
+        SettingsWindowCoordinator.shared.show(model: model)
     }
 
     @objc private func quit() {
@@ -133,12 +128,6 @@ struct DevSearchApp: App {
     }
 
     var body: some Scene {
-        Settings {
-            SettingsView()
-                .environmentObject(model)
-                .frame(minWidth: 860, minHeight: 620)
-        }
-
         Window("编辑项目信息", id: "project-editor") {
             ProjectEditorHostView()
                 .environmentObject(model)

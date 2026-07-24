@@ -3,7 +3,6 @@ import SwiftUI
 
 struct SearchPanelView: View {
     @EnvironmentObject private var model: AppModel
-    @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
     @State private var projectSelectionIndex = 0
     @State private var clipboardSelectionIndex = 0
@@ -131,7 +130,10 @@ struct SearchPanelView: View {
             onRevealInFinder: revealSelection,
             onEditProject: editSelection,
             onRefresh: refreshProjects,
-            onOpenSettings: { openSettings() },
+            onOpenSettings: {
+                SearchWindowCoordinator.shared.hide()
+                SettingsWindowCoordinator.shared.show(model: model)
+            },
             onEnterPreview: enterPreview,
             onSelectProjects: { model.quickPanelMode = .projects },
             onSelectClipboard: { model.quickPanelMode = .clipboard },
