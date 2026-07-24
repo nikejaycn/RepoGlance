@@ -32,7 +32,10 @@ final class SearchWindowCoordinator: NSObject, NSWindowDelegate {
     func show(model: AppModel, mode: QuickPanelMode = .projects) {
         self.model = model
         model.quickPanelMode = mode
-        let content = SearchPanelView().environmentObject(model)
+        let content = SearchPanelView { [weak self] height in
+            self?.resizePanel(to: height)
+        }
+        .environmentObject(model)
         let hosting = NSHostingView(rootView: content)
         let target: NSPanel
         if let panel {
@@ -40,7 +43,7 @@ final class SearchWindowCoordinator: NSObject, NSWindowDelegate {
             target = panel
         } else {
             let created = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 560, height: 704),
+                contentRect: NSRect(x: 0, y: 0, width: 620, height: 400),
                 styleMask: [.titled, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
@@ -55,8 +58,10 @@ final class SearchWindowCoordinator: NSObject, NSWindowDelegate {
             created.level = .floating
             created.collectionBehavior = [.transient, .moveToActiveSpace, .fullScreenAuxiliary]
             created.delegate = self
-            created.contentView = hosting
             panel = created
+            // Assign the panel before mounting SwiftUI so SearchPanelView.onAppear
+            // can immediately apply its preferred compact height.
+            created.contentView = hosting
             target = created
         }
 
@@ -88,6 +93,18 @@ final class SearchWindowCoordinator: NSObject, NSWindowDelegate {
         let x = min(max(mouse.x - panel.frame.width / 2, visible.minX + 16), visible.maxX - panel.frame.width - 16)
         let y = visible.maxY - panel.frame.height - 12
         panel.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    private func resizePanel(to contentHeight: CGFloat) {
+        guard let panel else { return }
+        let targetHeight = min(640, max(300, contentHeight))
+        guard abs(panel.frame.height - targetHeight) > 0.5 else { return }
+
+        var frame = panel.frame
+        let top = frame.maxY
+        frame.size.height = targetHeight
+        frame.origin.y = top - targetHeight
+        panel.setFrame(frame, display: true, animate: panel.isVisible)
     }
 
     private func findSearchField(in view: NSView?) -> NSSearchField? {

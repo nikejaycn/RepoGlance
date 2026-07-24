@@ -41,6 +41,32 @@ final class DevSearchUITests: XCTestCase {
         XCTAssertTrue(api.label.contains("services/API"))
     }
 
+    func testCompactResultLayoutAndFilteredResultSummary() {
+        let searchField = app.searchFields["search-field"]
+        let modePicker = app.descendants(matching: .any)["quickPanelModePicker"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        XCTAssertTrue(modePicker.waitForExistence(timeout: 3))
+
+        XCTAssertLessThan(abs(searchField.frame.midY - modePicker.frame.midY), 8)
+        XCTAssertGreaterThan(searchField.frame.width, modePicker.frame.width)
+
+        let webApp = projectButton(named: "WebApp")
+        XCTAssertTrue(webApp.waitForExistence(timeout: 8))
+        XCTAssertLessThanOrEqual(webApp.frame.height, 62)
+
+        searchField.typeText("API")
+
+        let resultCount = app.descendants(matching: .any)["project-result-count"]
+        XCTAssertTrue(resultCount.waitForExistence(timeout: 3))
+        XCTAssertEqual(resultCount.label, "1 个结果")
+        XCTAssertTrue(projectButton(named: "API").exists)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Compact project search results"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testSearchFieldIsFocusedOnLaunch() {
         let searchField = app.searchFields["search-field"]
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))

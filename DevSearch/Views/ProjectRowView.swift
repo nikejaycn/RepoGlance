@@ -15,25 +15,32 @@ struct ProjectRowView: View {
         Button {
             Task { await model.open(project) }
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 if depth > 0 {
                     Image(systemName: "arrow.turn.down.right")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .frame(width: 14)
+                        .frame(width: 12)
                 }
 
                 Image(systemName: projectIcon)
-                    .frame(width: 18)
+                    .font(.body)
+                    .frame(width: 17)
                     .foregroundStyle(project.availability == .available ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(project.name)
-                            .font(.body.weight(.medium))
-                            .fixedSize(horizontal: false, vertical: true)
+                            .font(.callout.weight(.medium))
+                            .lineLimit(1)
                             .layoutPriority(1)
                             .help(project.name)
+                        if project.isNested {
+                            Text(nestedRelationship)
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                        }
                         if let availabilityLabel {
                             Label(availabilityLabel, systemImage: projectIcon)
                                 .font(.caption2)
@@ -41,29 +48,23 @@ struct ProjectRowView: View {
                         }
                     }
 
-                    if project.isNested {
-                        Text(nestedRelationship)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
                     Text(abbreviatedPath)
-                        .font(.caption.monospaced())
+                        .font(.caption2.monospaced())
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if let matchedExcerpt, !matchedExcerpt.isEmpty {
                         Text(matchedExcerpt.replacingOccurrences(of: "\n", with: " "))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
                             .lineLimit(1)
                     }
                 }
 
-                Spacer(minLength: 8)
+                Spacer(minLength: 6)
                 if project.isFavorite {
                     Image(systemName: "star.fill")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .accessibilityLabel("已收藏")
                 }
@@ -71,17 +72,17 @@ struct ProjectRowView: View {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
+                    .accessibilityHidden(true)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
-            .frame(minHeight: matchedExcerpt == nil ? 64 : 78)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .frame(minHeight: matchedExcerpt == nil ? 46 : 60)
             .contentShape(Rectangle())
             .background(ScreenFrameReader { screenFrame = $0 })
         }
         .buttonStyle(.plain)
-        .padding(.leading, CGFloat(min(depth, 2)) * 14)
+        .padding(.leading, CGFloat(min(depth, 2)) * 10)
         .onHover { hovering in
             isHovering = hovering
             if hovering {
@@ -165,7 +166,7 @@ struct ProjectRowView: View {
         guard let parentID = project.parentProjectID else { return "子仓库" }
         let parentName = model.data.projects.first { $0.id == parentID }?.name
             ?? URL(fileURLWithPath: parentID).lastPathComponent
-        return "子仓库 · 位于 \(parentName)"
+        return "位于 \(parentName)"
     }
 
     private var hasChildren: Bool {

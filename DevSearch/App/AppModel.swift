@@ -6,12 +6,18 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class AppModel: ObservableObject {
-    @Published private(set) var data = AppData()
-    @Published var query = ""
+    @Published private(set) var data = AppData() {
+        didSet { refreshProjectSearch() }
+    }
+    @Published var query = "" {
+        didSet { scheduleProjectSearch() }
+    }
     @Published var clipboardQuery = ""
     @Published var quickPanelMode: QuickPanelMode = .projects
     @Published var selectedProjectID: String?
     @Published var selectedClipboardItemID: UUID?
+    @Published private(set) var searchMatches: [SearchMatch] = []
+    @Published private(set) var appliedProjectQuery = ""
     @Published private(set) var isScanning = false
     @Published private(set) var discoveredCount = 0
     @Published private(set) var scanIssues: [ScanIssue] = []
@@ -24,6 +30,7 @@ final class AppModel: ObservableObject {
     private let fileSystemMonitor: FileSystemMonitor
     private let hotKeyManager: GlobalHotKeyManager
     private let clipboardMonitor: ClipboardMonitor
+    private let projectSearchDebouncer: Debouncer
     private var scanTask: Task<Void, Never>?
     private var incrementalScanTask: Task<Void, Never>?
     private var periodicScanTask: Task<Void, Never>?
@@ -36,7 +43,8 @@ final class AppModel: ObservableObject {
         editorService: EditorService = EditorService(),
         fileSystemMonitor: FileSystemMonitor = FileSystemMonitor(),
         hotKeyManager: GlobalHotKeyManager = GlobalHotKeyManager(),
-        clipboardMonitor: ClipboardMonitor = ClipboardMonitor()
+        clipboardMonitor: ClipboardMonitor = ClipboardMonitor(),
+        projectSearchDebounce: Duration = .milliseconds(180)
     ) {
         self.store = store ?? ProjectStore(storageURL: Self.debugStorageURL)
         self.scanner = scanner
@@ -44,10 +52,8 @@ final class AppModel: ObservableObject {
         self.fileSystemMonitor = fileSystemMonitor
         self.hotKeyManager = hotKeyManager
         self.clipboardMonitor = clipboardMonitor
-    }
-
-    var searchMatches: [SearchMatch] {
-        SearchService.search(indexedProjects, query: query)
+        self.projectSearchDebouncer = Debouncer(delay: projectSearchDebounce)
+        refreshProjectSearch()
     }
 
     var indexedProjects: [ProjectRecord] {
@@ -56,6 +62,10 @@ final class AppModel: ObservableObject {
 
     var visibleProjects: [ProjectRecord] {
         searchMatches.map(\.project)
+    }
+
+    var isProjectSearchPending: Bool {
+        normalizedSearchQuery(query) != normalizedSearchQuery(appliedProjectQuery)
     }
 
     var visibleClipboardItems: [ClipboardItem] {
@@ -82,6 +92,11 @@ final class AppModel: ObservableObject {
     var selectedProject: ProjectRecord? {
         guard let selectedProjectID else { return visibleProjects.first }
         return data.projects.first { $0.id == selectedProjectID }
+    }
+
+    func flushProjectSearch() {
+        projectSearchDebouncer.cancel()
+        applyProjectSearch(query)
     }
 
     func start() async {
@@ -744,6 +759,34 @@ final class AppModel: ObservableObject {
             data.projects.append(discovered)
         }
         data.projects.sort { $0.canonicalPath.localizedStandardCompare($1.canonicalPath) == .orderedAscending }
+    }
+
+    private func scheduleProjectSearch() {
+        let pendingQuery = query
+        if normalizedSearchQuery(pendingQuery).isEmpty {
+            projectSearchDebouncer.cancel()
+            applyProjectSearch(pendingQuery)
+            return
+        }
+
+        projectSearchDebouncer.schedule { [weak self] in
+            guard let self, self.query == pendingQuery else { return }
+            self.applyProjectSearch(pendingQuery)
+        }
+    }
+
+    private func refreshProjectSearch() {
+        applyProjectSearch(appliedProjectQuery)
+    }
+
+    private func applyProjectSearch(_ searchQuery: String) {
+        let matches = SearchService.search(indexedProjects, query: searchQuery)
+        searchMatches = matches
+        appliedProjectQuery = searchQuery
+    }
+
+    private func normalizedSearchQuery(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func persist() {

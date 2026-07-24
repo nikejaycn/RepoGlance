@@ -4,6 +4,7 @@ import SwiftUI
 struct SearchPanelView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.openWindow) private var openWindow
+    var onPreferredHeightChange: (CGFloat) -> Void = { _ in }
     @State private var projectSelectionIndex = 0
     @State private var clipboardSelectionIndex = 0
     @State private var removedClipboardItem: (item: ClipboardItem, index: Int)?
@@ -11,8 +12,7 @@ struct SearchPanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            modeHeader
-            searchHeader
+            commandBar
             Divider()
             content
             if removedClipboardItem != nil {
@@ -21,31 +21,48 @@ struct SearchPanelView: View {
             }
             statusBar
         }
-        .frame(width: 560)
-        .frame(minHeight: 420, maxHeight: 704)
+        .frame(width: 620)
+        .frame(minHeight: 300, maxHeight: 640)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(.separator.opacity(0.42), lineWidth: 0.5)
         }
-        .onChange(of: model.query) { _, _ in
+        .onChange(of: model.appliedProjectQuery) { _, _ in
             projectSelectionIndex = 0
             syncProjectSelection()
+            updatePreferredHeight()
         }
         .onChange(of: model.clipboardQuery) { _, _ in
             clipboardSelectionIndex = 0
             syncClipboardSelection()
+            updatePreferredHeight()
         }
         .onChange(of: model.quickPanelMode) { _, mode in
             PreviewPanelCoordinator.shared.hideImmediately()
             removedClipboardItem = nil
             if mode == .projects { syncProjectSelection() }
             else { syncClipboardSelection() }
+            updatePreferredHeight()
+        }
+        .onChange(of: model.visibleProjects.count) { _, _ in
+            updatePreferredHeight()
+        }
+        .onChange(of: model.visibleClipboardItems.count) { _, _ in
+            updatePreferredHeight()
+        }
+        .onChange(of: model.data.scanRoots.count) { _, _ in
+            updatePreferredHeight()
         }
         .onAppear {
             if model.quickPanelMode == .projects { syncProjectSelection() }
             else { syncClipboardSelection() }
+            // NSHostingView finishes applying its initial fitting size after onAppear.
+            // Resize on the next run-loop turn so the compact height wins on first show.
+            DispatchQueue.main.async {
+                updatePreferredHeight()
+            }
 #if DEBUG
             if
                 ProcessInfo.processInfo.arguments.contains("--show-preview"),
@@ -85,66 +102,63 @@ struct SearchPanelView: View {
         }
     }
 
-    private var modeHeader: some View {
-        ZStack {
+    private var commandBar: some View {
+        HStack(spacing: 10) {
             Picker("快速面板模式", selection: $model.quickPanelMode) {
-                Text("⌘1  项目").tag(QuickPanelMode.projects)
-                Text("⌘2  剪贴板").tag(QuickPanelMode.clipboard)
+                Label("项目", systemImage: "folder")
+                    .tag(QuickPanelMode.projects)
+                Label("剪贴板", systemImage: "clipboard")
+                    .tag(QuickPanelMode.clipboard)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 268)
+            .frame(width: 176)
             .accessibilityLabel("快速面板模式")
             .accessibilityIdentifier("quickPanelModePicker")
+            .help("项目 ⌘1 · 剪贴板 ⌘2")
+
+            NativeSearchField(
+                text: activeQueryBinding,
+                placeholder: model.quickPanelMode == .projects
+                    ? "搜索项目、路径、说明或标签…"
+                    : "搜索剪贴板文本…",
+                isEnabled: model.quickPanelMode == .clipboard || !model.data.scanRoots.isEmpty,
+                preferredHeight: 32,
+                onMoveUp: { moveSelection(.up) },
+                onMoveDown: { moveSelection(.down) },
+                onSubmit: performPrimaryAction,
+                onChooseOpeningMethod: chooseOpeningMethod,
+                onRevealInFinder: revealSelection,
+                onEditProject: editSelection,
+                onRefresh: refreshProjects,
+                onOpenSettings: {
+                    SearchWindowCoordinator.shared.hide()
+                    SettingsWindowCoordinator.shared.show(model: model)
+                },
+                onEnterPreview: enterPreview,
+                onSelectProjects: { model.quickPanelMode = .projects },
+                onSelectClipboard: { model.quickPanelMode = .clipboard },
+                onCopySelection: copySelectionWithoutClosing,
+                onDeleteSelection: deleteClipboardSelection,
+                onClearClipboardHistory: requestClearClipboardHistory,
+                onEscape: handleEscape
+            )
+            .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32)
 
             if model.quickPanelMode == .clipboard {
-                HStack(spacing: 6) {
-                    Label(
-                        model.data.preferences.clipboardHistoryEnabled ? "记录中" : "已暂停",
-                        systemImage: model.data.preferences.clipboardHistoryEnabled
-                            ? "record.circle.fill"
-                            : "pause.circle"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.trailing, 16)
+                Image(
+                    systemName: model.data.preferences.clipboardHistoryEnabled
+                        ? "record.circle.fill"
+                        : "pause.circle"
+                )
+                .foregroundStyle(.secondary)
+                .help(model.data.preferences.clipboardHistoryEnabled ? "剪贴板记录中" : "剪贴板记录已暂停")
+                .accessibilityLabel(model.data.preferences.clipboardHistoryEnabled ? "记录中" : "已暂停")
             }
         }
-        .padding(.top, 12)
-        .padding(.bottom, 4)
-    }
-
-    private var searchHeader: some View {
-        NativeSearchField(
-            text: activeQueryBinding,
-            placeholder: model.quickPanelMode == .projects
-                ? "搜索项目、路径、说明或标签…"
-                : "搜索剪贴板文本…",
-            isEnabled: model.quickPanelMode == .clipboard || !model.data.scanRoots.isEmpty,
-            onMoveUp: { moveSelection(.up) },
-            onMoveDown: { moveSelection(.down) },
-            onSubmit: performPrimaryAction,
-            onChooseOpeningMethod: chooseOpeningMethod,
-            onRevealInFinder: revealSelection,
-            onEditProject: editSelection,
-            onRefresh: refreshProjects,
-            onOpenSettings: {
-                SearchWindowCoordinator.shared.hide()
-                SettingsWindowCoordinator.shared.show(model: model)
-            },
-            onEnterPreview: enterPreview,
-            onSelectProjects: { model.quickPanelMode = .projects },
-            onSelectClipboard: { model.quickPanelMode = .clipboard },
-            onCopySelection: copySelectionWithoutClosing,
-            onDeleteSelection: deleteClipboardSelection,
-            onClearClipboardHistory: requestClearClipboardHistory,
-            onEscape: handleEscape
-        )
-        .frame(height: 36)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.bar)
     }
 
     @ViewBuilder
@@ -174,25 +188,70 @@ struct SearchPanelView: View {
             }
             .frame(maxHeight: .infinity)
             .padding()
-        } else if !model.query.isEmpty && model.visibleProjects.isEmpty && !model.isScanning {
-            ContentUnavailableView {
-                Label("没有找到“\(model.query)”", systemImage: "magnifyingglass")
-            } description: {
+        } else if
+            !model.isProjectSearchPending,
+            !model.appliedProjectQuery.isEmpty,
+            model.visibleProjects.isEmpty,
+            !model.isScanning
+        {
+            VStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 28, weight: .light))
+                    .foregroundStyle(.secondary)
+                Text("没有找到“\(model.appliedProjectQuery)”")
+                    .font(.headline)
                 Text("尝试项目名称、路径、说明或标签。")
-            } actions: {
-                Button("清除搜索") { model.query = "" }
-                Button("重新扫描") { model.startScan() }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Button("清除搜索") { model.query = "" }
+                    Button("重新扫描") { model.startScan() }
+                }
+                .controlSize(.small)
             }
-            .frame(maxHeight: .infinity)
-            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.vertical, 24)
         } else {
-            projectList
+            VStack(spacing: 0) {
+                projectResultsSummary
+                Divider()
+                projectList
+            }
         }
+    }
+
+    private var projectResultsSummary: some View {
+        HStack(spacing: 7) {
+            if model.isProjectSearchPending {
+                ProgressView()
+                    .controlSize(.mini)
+                Text("正在筛选…")
+                    .accessibilityIdentifier("project-search-pending")
+            } else if model.appliedProjectQuery.isEmpty {
+                Text("\(model.indexedProjects.count) 个项目")
+            } else {
+                Text("\(model.visibleProjects.count) 个结果")
+                    .accessibilityIdentifier("project-result-count")
+            }
+
+            Spacer()
+
+            if !model.appliedProjectQuery.isEmpty, !model.isProjectSearchPending {
+                Text("匹配名称、路径、说明、标签与 README")
+            } else {
+                Text("悬停查看说明")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .frame(height: 28)
+        .background(.quaternary.opacity(0.35))
     }
 
     private var projectList: some View {
         List(selection: $model.selectedProjectID) {
-            if model.query.isEmpty {
+            if model.appliedProjectQuery.isEmpty {
                 if !model.recentProjects.isEmpty {
                     projectSection(title: "最近使用", projects: Array(model.recentProjects.prefix(5)))
                 }
@@ -205,20 +264,21 @@ struct SearchPanelView: View {
                     projectSection(title: "项目", projects: Array(model.indexedProjects.prefix(12)))
                 }
             } else {
-                projectSection(
-                    title: "结果 \(model.visibleProjects.count)",
-                    projects: Array(model.visibleProjects.prefix(200)),
-                    excerpts: Dictionary(
-                        model.searchMatches.compactMap { match in
-                            match.matchedExcerpt.map { (match.id, $0) }
-                        },
-                        uniquingKeysWith: { _, last in last }
-                    )
+                let excerpts = Dictionary(
+                    model.searchMatches.compactMap { match in
+                        match.matchedExcerpt.map { (match.id, $0) }
+                    },
+                    uniquingKeysWith: { _, last in last }
                 )
+                ForEach(model.visibleProjects.prefix(200)) { project in
+                    projectRow(project, excerpt: excerpts[project.id])
+                }
             }
         }
-        .listStyle(.inset)
+        .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .contentMargins(.horizontal, 8, for: .scrollContent)
+        .contentMargins(.vertical, 4, for: .scrollContent)
         .frame(maxHeight: .infinity)
         .accessibilityIdentifier("projectResults")
     }
@@ -228,17 +288,31 @@ struct SearchPanelView: View {
         projects: [ProjectRecord],
         excerpts: [String: String] = [:]
     ) -> some View {
-        Section(title) {
+        Section {
             ForEach(projects) { project in
-                ProjectRowView(
-                    project: project,
-                    depth: hierarchyDepth(for: project),
-                    isSelected: model.selectedProjectID == project.id,
-                    matchedExcerpt: excerpts[project.id]
-                )
-                .tag(project.id)
+                projectRow(project, excerpt: excerpts[project.id])
             }
+        } header: {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(nil)
+                .padding(.top, 4)
+                .padding(.bottom, 2)
         }
+    }
+
+    private func projectRow(_ project: ProjectRecord, excerpt: String?) -> some View {
+        ProjectRowView(
+            project: project,
+            depth: hierarchyDepth(for: project),
+            isSelected: model.selectedProjectID == project.id,
+            matchedExcerpt: excerpt
+        )
+        .tag(project.id)
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.visible, edges: .bottom)
+        .listRowBackground(Color.clear)
     }
 
     @ViewBuilder
@@ -281,8 +355,10 @@ struct SearchPanelView: View {
                 }
             }
         }
-        .listStyle(.inset)
+        .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .contentMargins(.horizontal, 8, for: .scrollContent)
+        .contentMargins(.vertical, 4, for: .scrollContent)
         .frame(maxHeight: .infinity)
         .accessibilityIdentifier("clipboardHistoryList")
     }
@@ -301,7 +377,7 @@ struct SearchPanelView: View {
             }
             .buttonStyle(.link)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 12)
         .frame(height: 34)
         .background(.bar)
     }
@@ -317,8 +393,8 @@ struct SearchPanelView: View {
             contextualShortcutHints
         }
         .font(.caption)
-        .padding(.horizontal, 16)
-        .frame(height: 44)
+        .padding(.horizontal, 12)
+        .frame(height: 34)
     }
 
     @ViewBuilder
@@ -373,7 +449,7 @@ struct SearchPanelView: View {
     }
 
     private var selectableProjects: [ProjectRecord] {
-        if !model.query.isEmpty { return model.visibleProjects }
+        if !model.appliedProjectQuery.isEmpty { return model.visibleProjects }
         let recent = Array(model.recentProjects.prefix(5))
         let recentIDs = Set(recent.map(\.id))
         let favorites = model.favoriteProjects.filter { !recentIDs.contains($0.id) }
@@ -383,6 +459,10 @@ struct SearchPanelView: View {
 
     private func moveSelection(_ direction: MoveCommandDirection) {
         if model.quickPanelMode == .projects {
+            if model.isProjectSearchPending {
+                model.flushProjectSearch()
+                projectSelectionIndex = 0
+            }
             guard !selectableProjects.isEmpty else { return }
             switch direction {
             case .down: projectSelectionIndex = min(projectSelectionIndex + 1, selectableProjects.count - 1)
@@ -427,6 +507,11 @@ struct SearchPanelView: View {
 
     private func performPrimaryAction() {
         if model.quickPanelMode == .projects {
+            if model.isProjectSearchPending {
+                model.flushProjectSearch()
+                projectSelectionIndex = 0
+                syncProjectSelection()
+            }
             guard selectableProjects.indices.contains(projectSelectionIndex) else { return }
             Task { await model.open(selectableProjects[projectSelectionIndex]) }
         } else if model.visibleClipboardItems.indices.contains(clipboardSelectionIndex) {
@@ -435,6 +520,7 @@ struct SearchPanelView: View {
     }
 
     private func chooseOpeningMethod() {
+        commitPendingProjectSearch()
         guard model.quickPanelMode == .projects,
               selectableProjects.indices.contains(projectSelectionIndex)
         else { return }
@@ -442,6 +528,7 @@ struct SearchPanelView: View {
     }
 
     private func revealSelection() {
+        commitPendingProjectSearch()
         guard model.quickPanelMode == .projects,
               selectableProjects.indices.contains(projectSelectionIndex)
         else { return }
@@ -449,6 +536,7 @@ struct SearchPanelView: View {
     }
 
     private func editSelection() {
+        commitPendingProjectSearch()
         guard model.quickPanelMode == .projects,
               selectableProjects.indices.contains(projectSelectionIndex)
         else { return }
@@ -463,6 +551,7 @@ struct SearchPanelView: View {
     }
 
     private func enterPreview() {
+        commitPendingProjectSearch()
         guard model.quickPanelMode == .projects,
               selectableProjects.indices.contains(projectSelectionIndex)
         else { return }
@@ -473,6 +562,7 @@ struct SearchPanelView: View {
 
     private func copySelectionWithoutClosing() {
         if model.quickPanelMode == .projects {
+            commitPendingProjectSearch()
             guard selectableProjects.indices.contains(projectSelectionIndex) else { return }
             model.copyPath(selectableProjects[projectSelectionIndex])
         } else if model.visibleClipboardItems.indices.contains(clipboardSelectionIndex) {
@@ -521,6 +611,50 @@ struct SearchPanelView: View {
             model.clipboardQuery = ""
         } else {
             SearchWindowCoordinator.shared.hide()
+        }
+    }
+
+    private func commitPendingProjectSearch() {
+        guard model.quickPanelMode == .projects, model.isProjectSearchPending else { return }
+        model.flushProjectSearch()
+        projectSelectionIndex = 0
+        syncProjectSelection()
+    }
+
+    private func updatePreferredHeight() {
+        onPreferredHeightChange(preferredPanelHeight)
+    }
+
+    private var preferredPanelHeight: CGFloat {
+        switch model.quickPanelMode {
+        case .projects:
+            guard !model.data.scanRoots.isEmpty else { return 400 }
+            if
+                !model.isProjectSearchPending,
+                !model.appliedProjectQuery.isEmpty,
+                model.visibleProjects.isEmpty
+            {
+                return 360
+            }
+
+            let projectCount = min(selectableProjects.count, 10)
+            let sectionCount: Int
+            if model.appliedProjectQuery.isEmpty {
+                let recentCount = model.recentProjects.isEmpty ? 0 : 1
+                let recentIDs = Set(model.recentProjects.prefix(5).map(\.id))
+                let hasFavorites = model.favoriteProjects.contains { !recentIDs.contains($0.id) }
+                sectionCount = max(1, recentCount + (hasFavorites ? 1 : 0))
+            } else {
+                sectionCount = 0
+            }
+            let estimatedRows = CGFloat(projectCount) * (model.appliedProjectQuery.isEmpty ? 46 : 52)
+            let estimatedSections = CGFloat(sectionCount) * 25
+            return min(640, max(300, 118 + estimatedRows + estimatedSections))
+
+        case .clipboard:
+            guard !model.visibleClipboardItems.isEmpty else { return 360 }
+            let rowCount = min(model.visibleClipboardItems.count, 8)
+            return min(640, max(340, 94 + CGFloat(rowCount) * 62))
         }
     }
 
