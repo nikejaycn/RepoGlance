@@ -91,6 +91,7 @@ enum GlobalShortcut: String, Codable, CaseIterable, Identifiable, Sendable {
     case optionShiftSpace
     case commandShiftSpace
     case controlOptionSpace
+    case controlOptionT
 
     var id: String { rawValue }
 
@@ -100,6 +101,7 @@ enum GlobalShortcut: String, Codable, CaseIterable, Identifiable, Sendable {
         case .optionShiftSpace: "⌥ ⇧ Space"
         case .commandShiftSpace: "⌘ ⇧ Space"
         case .controlOptionSpace: "⌃ ⌥ Space"
+        case .controlOptionT: "⌃ ⌥ T"
         }
     }
 }
@@ -124,6 +126,7 @@ struct AppData: Codable, Sendable {
     var editors: [EditorDefinition] = []
     var clipboardItems: [ClipboardItem] = []
     var preferences = AppPreferences()
+    var toolboxPreferences = ToolboxPreferences()
 }
 
 extension ScanRoot {
@@ -172,7 +175,7 @@ extension AppPreferences {
 
 extension AppData {
     private enum CodingKeys: String, CodingKey {
-        case scanRoots, projects, exclusionRules, editors, clipboardItems, preferences
+        case scanRoots, projects, exclusionRules, editors, clipboardItems, preferences, toolboxPreferences
     }
 
     init(from decoder: Decoder) throws {
@@ -188,6 +191,8 @@ extension AppData {
         clipboardItems = (try values.decodeIfPresent([ClipboardItem].self, forKey: .clipboardItems) ?? [])
             .deduplicatedKeepingLast(by: \.id)
         preferences = try values.decodeIfPresent(AppPreferences.self, forKey: .preferences) ?? AppPreferences()
+        toolboxPreferences = try values.decodeIfPresent(ToolboxPreferences.self, forKey: .toolboxPreferences)
+            ?? ToolboxPreferences()
     }
 }
 

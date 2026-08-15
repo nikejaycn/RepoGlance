@@ -33,15 +33,16 @@ final class GlobalHotKeyManager: @unchecked Sendable {
         }
 
         let hotKeyID = EventHotKeyID(signature: fourCharacterCode("DVSR"), id: id)
-        let modifiers: UInt32 = switch shortcut {
-        case .optionSpace: UInt32(optionKey)
-        case .optionShiftSpace: UInt32(optionKey | shiftKey)
-        case .commandShiftSpace: UInt32(cmdKey | shiftKey)
-        case .controlOptionSpace: UInt32(controlKey | optionKey)
+        let (keyCode, modifiers): (UInt32, UInt32) = switch shortcut {
+        case .optionSpace: (UInt32(kVK_Space), UInt32(optionKey))
+        case .optionShiftSpace: (UInt32(kVK_Space), UInt32(optionKey | shiftKey))
+        case .commandShiftSpace: (UInt32(kVK_Space), UInt32(cmdKey | shiftKey))
+        case .controlOptionSpace: (UInt32(kVK_Space), UInt32(controlKey | optionKey))
+        case .controlOptionT: (UInt32(kVK_ANSI_T), UInt32(controlKey | optionKey))
         }
         var reference: EventHotKeyRef?
         let registrationStatus = RegisterEventHotKey(
-            UInt32(kVK_Space),
+            keyCode,
             modifiers,
             hotKeyID,
             GetApplicationEventTarget(),

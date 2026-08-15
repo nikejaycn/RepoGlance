@@ -31,6 +31,14 @@ final class DevSearchApplicationDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        Task { @MainActor in
+            await AppDependencies.model.toolbox.windowWillClose()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
 }
 
 @MainActor
@@ -68,6 +76,7 @@ final class StatusItemController: NSObject {
         let menu = NSMenu()
         menu.addItem(item("打开项目搜索", action: #selector(openSearch), key: ""))
         menu.addItem(item("打开剪贴板", action: #selector(openClipboardHistory), key: ""))
+        menu.addItem(item("开发工具箱…", action: #selector(openToolbox), key: ""))
         menu.addItem(.separator())
         menu.addItem(item("立即重新扫描", action: #selector(scanNow), key: ""))
 
@@ -98,6 +107,10 @@ final class StatusItemController: NSObject {
 
     @objc private func openClipboardHistory() {
         SearchWindowCoordinator.shared.show(model: model, mode: .clipboard)
+    }
+
+    @objc private func openToolbox() {
+        ToolboxWindowCoordinator.shared.show(model: model)
     }
 
     @objc private func scanNow() {
@@ -134,5 +147,22 @@ struct DevSearchApp: App {
         }
         .defaultSize(width: 680, height: 620)
         .windowResizability(.contentSize)
+        .commands {
+            CommandMenu("工具箱") {
+                Button("打开开发工具箱…") {
+                    ToolboxWindowCoordinator.shared.show(model: model)
+                }
+                Divider()
+                Button("搜索工具") {
+                    ToolboxWindowCoordinator.shared.show(model: model)
+                    DispatchQueue.main.async {
+                        ToolboxWindowCoordinator.shared.focusSearch()
+                    }
+                }
+                Button("聚焦工具输入") {
+                    ToolboxWindowCoordinator.shared.focusInput()
+                }
+            }
+        }
     }
 }

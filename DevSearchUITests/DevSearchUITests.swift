@@ -386,6 +386,42 @@ final class DevSearchUITests: XCTestCase {
         XCTAssertFalse(app.windows.firstMatch.waitForExistence(timeout: 1))
     }
 
+    func testToolboxShowsAllToolsAndTransformsText() {
+        app.terminate()
+        app = XCUIApplication()
+        app.launchArguments = [
+            "--show-toolbox",
+            "--test-storage", fixtureRoot.appendingPathComponent("toolbox-data.json").path,
+            "--toolbox-storage", fixtureRoot.appendingPathComponent("toolbox-session.json").path
+        ]
+        app.launch()
+
+        let searchField = app.searchFields["toolbox-search-field"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        for title in ["二维码生成", "编码转换", "时间戳换算", "JSON 工具", "UUID 生成", "哈希摘要"] {
+            XCTAssertTrue(app.staticTexts[title].exists, "Missing toolbox item: \(title)")
+        }
+
+        app.staticTexts["编码转换"].click()
+        let input = app.textViews["toolbox-primary-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 3))
+        input.click()
+        input.typeText("RepoGlance")
+
+        let output = app.descendants(matching: .any)["toolbox-output"]
+        XCTAssertTrue(output.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.textViews["UmVwb0dsYW5jZQ=="].waitForExistence(timeout: 3))
+
+        searchField.click()
+        searchField.typeText("hash")
+        XCTAssertTrue(app.staticTexts["哈希"].waitForExistence(timeout: 3))
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Developer toolbox"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     private func createFixture(at root: URL) throws {
         let fileManager = FileManager.default
         let web = root.appendingPathComponent("WebApp", isDirectory: true)

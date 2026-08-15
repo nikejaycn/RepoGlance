@@ -43,6 +43,7 @@ struct SettingsView: View {
                 case .sources: ScanRootsSettingsView()
                 case .opening: EditorSettingsView()
                 case .clipboard: ClipboardSettingsView()
+                case .toolbox: ToolboxSettingsView()
                 case .data: IndexSettingsView()
                 }
             }
@@ -83,6 +84,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     case sources
     case opening
     case clipboard
+    case toolbox
     case data
 
     var id: String { rawValue }
@@ -93,6 +95,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         case .sources: "项目来源"
         case .opening: "打开方式"
         case .clipboard: "剪贴板"
+        case .toolbox: "开发工具箱"
         case .data: "数据与关于"
         }
     }
@@ -103,6 +106,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         case .sources: "folder"
         case .opening: "command"
         case .clipboard: "clipboard"
+        case .toolbox: "wrench.and.screwdriver"
         case .data: "externaldrive"
         }
     }
@@ -118,6 +122,8 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
             searchableText = "打开方式 编辑器 Visual Studio Code Xcode Cursor Zed 终端"
         case .clipboard:
             searchableText = "剪贴板 历史 保留 快捷键 清空 本机"
+        case .toolbox:
+            searchableText = "开发工具箱 二维码 编码 时间戳 JSON UUID 哈希 快捷键 恢复 内容 清除"
         case .data:
             searchableText = "数据 关于 项目总数 顶层仓库 嵌套仓库 索引 导入 导出 版本"
         }
@@ -138,7 +144,7 @@ private struct GeneralSettingsView: View {
 
             Section("搜索与预览") {
                 Picker("快捷键", selection: preferenceBinding(\.globalShortcut)) {
-                    ForEach(GlobalShortcut.allCases.filter { $0 != .optionShiftSpace }) { shortcut in
+                    ForEach(GlobalShortcut.allCases.filter { $0 != .optionShiftSpace && $0 != .controlOptionT }) { shortcut in
                         Text(shortcut.displayName).tag(shortcut)
                     }
                 }
@@ -189,6 +195,138 @@ private struct GeneralSettingsView: View {
                 var preferences = model.data.preferences
                 preferences[keyPath: keyPath] = value
                 model.updatePreferences(preferences)
+            }
+        )
+    }
+}
+
+private struct ToolboxSettingsView: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var requestedRestoreValue: Bool?
+    @State private var confirmClearContent = false
+
+    var body: some View {
+        Form {
+            Section("快捷键") {
+                Toggle("启用工具箱全局快捷键", isOn: preferenceBinding(\.globalShortcutEnabled))
+                Picker("快捷键", selection: preferenceBinding(\.globalShortcut)) {
+                    Text(GlobalShortcut.controlOptionT.displayName).tag(GlobalShortcut.controlOptionT)
+                    Text(GlobalShortcut.controlOptionSpace.displayName).tag(GlobalShortcut.controlOptionSpace)
+                    Text(GlobalShortcut.commandShiftSpace.displayName).tag(GlobalShortcut.commandShiftSpace)
+                }
+                .disabled(!model.data.toolboxPreferences.globalShortcutEnabled)
+                Text("从任何应用打开工具箱；窗口已在前台时再次按下可隐藏。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("内容恢复") {
+                Toggle("恢复上次工具内容", isOn: restoreBinding)
+                LabeledContent(
+                    "已保存内容",
+                    value: ByteCountFormatter.string(
+                        fromByteCount: model.toolbox.storedSize,
+                        countStyle: .file
+                    )
+                )
+                Text(
+                    model.data.toolboxPreferences.restoreLastContent
+                        ? "每个工具只保存最后一次会话，不保存历史。内容仅保存在本机，但可能进入 Time Machine 等系统备份。"
+                        : "关闭时，内容只保留在当前窗口内存；关闭窗口或退出应用后清除。"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                Button("清除所有工具内容…", role: .destructive) {
+                    confirmClearContent = true
+                }
+            }
+
+            Section("工具偏好") {
+                Button("打开开发工具箱") {
+                    ToolboxWindowCoordinator.shared.show(model: model)
+                }
+                Button("重置工具偏好…") {
+                    let current = model.data.toolboxPreferences
+                    let restore = model.data.toolboxPreferences.restoreLastContent
+                    let shortcutEnabled = model.data.toolboxPreferences.globalShortcutEnabled
+                    var defaults = ToolboxPreferences()
+                    defaults.restoreLastContent = restore
+                    defaults.globalShortcutEnabled = shortcutEnabled
+                    defaults.globalShortcut = current.globalShortcut
+                    defaults.favoriteToolIDs = current.favoriteToolIDs
+                    defaults.recentToolIDs = current.recentToolIDs
+                    defaults.lastSelectedToolID = current.lastSelectedToolID
+                    model.updateToolboxPreferences(defaults)
+                }
+                Text("重置会恢复各工具格式、时区、缩进和尺寸选项，不删除收藏或当前工具内容。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("隐私") {
+                Label(
+                    "所有转换和生成均在本机完成；工具箱不会自动读取剪贴板，也不会发起网络请求。",
+                    systemImage: "lock"
+                )
+                .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .confirmationDialog(
+            requestedRestoreValue == true ? "启用内容恢复？" : "关闭内容恢复？",
+            isPresented: restoreConfirmationBinding
+        ) {
+            if requestedRestoreValue == true {
+                Button("启用") {
+                    requestedRestoreValue = nil
+                    Task { await model.setToolboxRestoreEnabled(true) }
+                }
+            } else {
+                Button("关闭并删除已保存内容", role: .destructive) {
+                    requestedRestoreValue = nil
+                    Task { await model.setToolboxRestoreEnabled(false) }
+                }
+            }
+            Button("取消", role: .cancel) { requestedRestoreValue = nil }
+        } message: {
+            if requestedRestoreValue == true {
+                Text("每个工具的最后一次内容将保存在本机，并可能进入系统备份。不会保存修改历史。")
+            } else {
+                Text("磁盘中的工具快照会立即删除；当前窗口内容保留到窗口关闭。")
+            }
+        }
+        .confirmationDialog("清除所有工具内容？", isPresented: $confirmClearContent) {
+            Button("清除", role: .destructive) {
+                Task { await model.clearToolboxContent() }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("这会清空当前窗口内容和全部已保存快照，但保留收藏、偏好和恢复设置。")
+        }
+    }
+
+    private var restoreBinding: Binding<Bool> {
+        Binding(
+            get: { model.data.toolboxPreferences.restoreLastContent },
+            set: { requestedRestoreValue = $0 }
+        )
+    }
+
+    private var restoreConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: { requestedRestoreValue != nil },
+            set: { if !$0 { requestedRestoreValue = nil } }
+        )
+    }
+
+    private func preferenceBinding<Value>(_ path: WritableKeyPath<ToolboxPreferences, Value>) -> Binding<Value> {
+        Binding(
+            get: { model.data.toolboxPreferences[keyPath: path] },
+            set: { value in
+                var preferences = model.data.toolboxPreferences
+                preferences[keyPath: path] = value
+                model.updateToolboxPreferences(preferences)
             }
         )
     }

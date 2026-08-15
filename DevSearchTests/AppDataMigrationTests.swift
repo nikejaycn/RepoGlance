@@ -25,6 +25,10 @@ final class AppDataMigrationTests: XCTestCase {
         XCTAssertFalse(data.preferences.clipboardHistoryEnabled)
         XCTAssertEqual(data.preferences.clipboardHistoryLimit, 100)
         XCTAssertTrue(data.clipboardItems.isEmpty)
+        XCTAssertEqual(data.toolboxPreferences.lastSelectedToolID, .qrCode)
+        XCTAssertFalse(data.toolboxPreferences.restoreLastContent)
+        XCTAssertTrue(data.toolboxPreferences.globalShortcutEnabled)
+        XCTAssertEqual(data.toolboxPreferences.globalShortcut, .controlOptionT)
     }
 
     func testDuplicateLegacyRecordsKeepLastValueInsteadOfCrashingAtStartup() throws {
