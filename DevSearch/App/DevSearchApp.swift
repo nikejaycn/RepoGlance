@@ -11,6 +11,13 @@ final class DevSearchApplicationDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+#if DEBUG
+        // Deterministic UI-test appearance without changing the user's system setting.
+        let arguments = ProcessInfo.processInfo.arguments
+        if let index = arguments.firstIndex(of: "--appearance"), index + 1 < arguments.count {
+            NSApp.appearance = NSAppearance(named: arguments[index + 1] == "Dark" ? .darkAqua : .aqua)
+        }
+#endif
         let model = AppDependencies.model
         statusItemController = StatusItemController(model: model)
         Task { @MainActor in
@@ -148,6 +155,14 @@ struct DevSearchApp: App {
         .defaultSize(width: 680, height: 620)
         .windowResizability(.contentSize)
         .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("设置…") { SettingsWindowCoordinator.shared.show(model: model) }
+                    .keyboardShortcut(",", modifiers: .command)
+            }
+            CommandGroup(after: .newItem) {
+                Button("搜索项目") { SearchWindowCoordinator.shared.show(model: model, mode: .projects) }
+                Button("打开剪贴板") { SearchWindowCoordinator.shared.show(model: model, mode: .clipboard) }
+            }
             CommandMenu("工具箱") {
                 Button("打开开发工具箱…") {
                     ToolboxWindowCoordinator.shared.show(model: model)

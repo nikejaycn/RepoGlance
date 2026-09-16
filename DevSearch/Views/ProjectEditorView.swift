@@ -120,7 +120,6 @@ struct ProjectEditorView: View {
                 }
             }
             .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
 
             Divider()
             HStack {
@@ -138,8 +137,7 @@ struct ProjectEditorView: View {
             .padding(12)
             .background(.bar)
         }
-        .frame(width: 680, height: 620)
-        .background(WindowMaterialBackground())
+        .frame(minWidth: 680, idealWidth: 760, minHeight: 540, idealHeight: 660)
         .background(WindowCloseGuard(
             shouldPreventClose: { hasChanges && !allowWindowClose },
             onCloseAttempt: { showingDiscardConfirmation = true }

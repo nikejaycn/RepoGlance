@@ -8,6 +8,7 @@ final class SettingsWindowCoordinator: NSObject, NSWindowDelegate {
     static let shared = SettingsWindowCoordinator()
 
     private var window: NSWindow?
+    var isKeyWindow: Bool { window?.isKeyWindow == true }
 
     var isVisible: Bool {
         window?.isVisible == true

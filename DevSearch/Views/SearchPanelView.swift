@@ -39,6 +39,16 @@ struct SearchPanelView: View {
             syncClipboardSelection()
             updatePreferredHeight()
         }
+        .onChange(of: model.selectedProjectID) { _, id in
+            if let index = selectableProjects.firstIndex(where: { $0.id == id }) {
+                projectSelectionIndex = index
+            }
+        }
+        .onChange(of: model.selectedClipboardItemID) { _, id in
+            if let index = model.visibleClipboardItems.firstIndex(where: { $0.id == id }) {
+                clipboardSelectionIndex = index
+            }
+        }
         .onChange(of: model.quickPanelMode) { _, mode in
             PreviewPanelCoordinator.shared.hideImmediately()
             removedClipboardItem = nil
@@ -46,16 +56,24 @@ struct SearchPanelView: View {
             else { syncClipboardSelection() }
             updatePreferredHeight()
         }
-        .onChange(of: model.visibleProjects.count) { _, _ in
+        .onChange(of: selectableProjects.map(\.id)) { _, ids in
+            if !ids.contains(model.selectedProjectID ?? "") {
+                projectSelectionIndex = 0
+                syncProjectSelection()
+            }
             updatePreferredHeight()
         }
-        .onChange(of: model.visibleClipboardItems.count) { _, _ in
+        .onChange(of: model.visibleClipboardItems.map(\.id)) { _, ids in
+            if model.selectedClipboardItemID.map({ !ids.contains($0) }) ?? true {
+                clipboardSelectionIndex = 0
+                syncClipboardSelection()
+            }
             updatePreferredHeight()
         }
         .onChange(of: model.data.scanRoots.count) { _, _ in
             updatePreferredHeight()
         }
-        .onAppear {
+        .task {
             if model.quickPanelMode == .projects { syncProjectSelection() }
             else { syncClipboardSelection() }
             // NSHostingView finishes applying its initial fitting size after onAppear.
@@ -124,6 +142,8 @@ struct SearchPanelView: View {
                     : "搜索剪贴板文本…",
                 isEnabled: model.quickPanelMode == .clipboard || !model.data.scanRoots.isEmpty,
                 preferredHeight: 32,
+                usesResultNavigation: true,
+                usesQuickPanelCommands: true,
                 onMoveUp: { moveSelection(.up) },
                 onMoveDown: { moveSelection(.down) },
                 onSubmit: performPrimaryAction,
@@ -239,7 +259,7 @@ struct SearchPanelView: View {
             if !model.appliedProjectQuery.isEmpty, !model.isProjectSearchPending {
                 Text("匹配名称、路径、说明、标签与 README")
             } else {
-                Text("悬停查看说明")
+                Text("悬停或按 ⌘→ 查看说明")
             }
         }
         .font(.caption)
@@ -250,37 +270,42 @@ struct SearchPanelView: View {
     }
 
     private var projectList: some View {
-        List(selection: $model.selectedProjectID) {
-            if model.appliedProjectQuery.isEmpty {
-                if !model.recentProjects.isEmpty {
-                    projectSection(title: "最近使用", projects: Array(model.recentProjects.prefix(5)))
-                }
-                let recentIDs = Set(model.recentProjects.prefix(5).map(\.id))
-                let favorites = model.favoriteProjects.filter { !recentIDs.contains($0.id) }
-                if !favorites.isEmpty {
-                    projectSection(title: "收藏", projects: Array(favorites.prefix(5)))
-                }
-                if model.recentProjects.isEmpty && favorites.isEmpty {
-                    projectSection(title: "项目", projects: Array(model.indexedProjects.prefix(12)))
-                }
-            } else {
-                let excerpts = Dictionary(
-                    model.searchMatches.compactMap { match in
-                        match.matchedExcerpt.map { (match.id, $0) }
-                    },
-                    uniquingKeysWith: { _, last in last }
-                )
-                ForEach(model.visibleProjects.prefix(200)) { project in
-                    projectRow(project, excerpt: excerpts[project.id])
+        ScrollViewReader { proxy in
+            List(selection: $model.selectedProjectID) {
+                if model.appliedProjectQuery.isEmpty {
+                    if !model.recentProjects.isEmpty {
+                        projectSection(title: "最近使用", projects: Array(model.recentProjects.prefix(5)))
+                    }
+                    let recentIDs = Set(model.recentProjects.prefix(5).map(\.id))
+                    let favorites = model.favoriteProjects.filter { !recentIDs.contains($0.id) }
+                    if !favorites.isEmpty {
+                        projectSection(title: "收藏", projects: Array(favorites.prefix(5)))
+                    }
+                    if model.recentProjects.isEmpty && favorites.isEmpty {
+                        projectSection(title: "项目", projects: Array(model.indexedProjects.prefix(12)))
+                    }
+                } else {
+                    let excerpts = Dictionary(
+                        model.searchMatches.compactMap { match in
+                            match.matchedExcerpt.map { (match.id, $0) }
+                        },
+                        uniquingKeysWith: { _, last in last }
+                    )
+                    ForEach(model.visibleProjects.prefix(200)) { project in
+                        projectRow(project, excerpt: excerpts[project.id])
+                    }
                 }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .contentMargins(.horizontal, 8, for: .scrollContent)
+            .contentMargins(.vertical, 4, for: .scrollContent)
+            .frame(maxHeight: .infinity)
+            .accessibilityIdentifier("projectResults")
+            .onChange(of: model.selectedProjectID) { _, id in
+                if let id { proxy.scrollTo(id) }
+            }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .contentMargins(.horizontal, 8, for: .scrollContent)
-        .contentMargins(.vertical, 4, for: .scrollContent)
-        .frame(maxHeight: .infinity)
-        .accessibilityIdentifier("projectResults")
     }
 
     private func projectSection(
@@ -340,27 +365,32 @@ struct SearchPanelView: View {
     }
 
     private var clipboardList: some View {
-        List(selection: $model.selectedClipboardItemID) {
-            ForEach(Array(clipboardGroups.enumerated()), id: \.offset) { _, items in
-                Section(dateSectionTitle(items[0].copiedAt)) {
-                    ForEach(items) { item in
-                        ClipboardQuickRow(
-                            item: item,
-                            isSelected: model.selectedClipboardItemID == item.id,
-                            onCopy: { copyClipboardItem(item, close: true) },
-                            onDelete: { deleteClipboardItem(item) }
-                        )
-                        .tag(item.id)
+        ScrollViewReader { proxy in
+            List(selection: $model.selectedClipboardItemID) {
+                ForEach(Array(clipboardGroups.enumerated()), id: \.offset) { _, items in
+                    Section(dateSectionTitle(items[0].copiedAt)) {
+                        ForEach(items) { item in
+                            ClipboardQuickRow(
+                                item: item,
+                                isSelected: model.selectedClipboardItemID == item.id,
+                                onCopy: { copyClipboardItem(item, close: true) },
+                                onDelete: { deleteClipboardItem(item) }
+                            )
+                            .tag(item.id)
+                        }
                     }
                 }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .contentMargins(.horizontal, 8, for: .scrollContent)
+            .contentMargins(.vertical, 4, for: .scrollContent)
+            .frame(maxHeight: .infinity)
+            .accessibilityIdentifier("clipboardHistoryList")
+            .onChange(of: model.selectedClipboardItemID) { _, id in
+                if let id { proxy.scrollTo(id) }
+            }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .contentMargins(.horizontal, 8, for: .scrollContent)
-        .contentMargins(.vertical, 4, for: .scrollContent)
-        .frame(maxHeight: .infinity)
-        .accessibilityIdentifier("clipboardHistoryList")
     }
 
     private var undoBar: some View {
@@ -449,16 +479,19 @@ struct SearchPanelView: View {
     }
 
     private var selectableProjects: [ProjectRecord] {
-        if !model.appliedProjectQuery.isEmpty { return model.visibleProjects }
+        if !model.appliedProjectQuery.isEmpty { return Array(model.visibleProjects.prefix(200)) }
         let recent = Array(model.recentProjects.prefix(5))
         let recentIDs = Set(recent.map(\.id))
-        let favorites = model.favoriteProjects.filter { !recentIDs.contains($0.id) }
+        let favorites = Array(model.favoriteProjects.filter { !recentIDs.contains($0.id) }.prefix(5))
         let combined = recent + favorites
         return combined.isEmpty ? Array(model.indexedProjects.prefix(12)) : combined
     }
 
     private func moveSelection(_ direction: MoveCommandDirection) {
         if model.quickPanelMode == .projects {
+            if let selected = selectableProjects.firstIndex(where: { $0.id == model.selectedProjectID }) {
+                projectSelectionIndex = selected
+            }
             if model.isProjectSearchPending {
                 model.flushProjectSearch()
                 projectSelectionIndex = 0
@@ -471,6 +504,9 @@ struct SearchPanelView: View {
             }
             syncProjectSelection(showPreviewImmediately: true)
         } else {
+            if let selected = model.visibleClipboardItems.firstIndex(where: { $0.id == model.selectedClipboardItemID }) {
+                clipboardSelectionIndex = selected
+            }
             guard !model.visibleClipboardItems.isEmpty else { return }
             switch direction {
             case .down:
@@ -512,10 +548,12 @@ struct SearchPanelView: View {
                 projectSelectionIndex = 0
                 syncProjectSelection()
             }
-            guard selectableProjects.indices.contains(projectSelectionIndex) else { return }
-            Task { await model.open(selectableProjects[projectSelectionIndex]) }
-        } else if model.visibleClipboardItems.indices.contains(clipboardSelectionIndex) {
-            copyClipboardItem(model.visibleClipboardItems[clipboardSelectionIndex], close: true)
+            guard let project = selectableProjects.first(where: { $0.id == model.selectedProjectID })
+                ?? selectableProjects.first else { return }
+            Task { await model.open(project) }
+        } else if let item = model.visibleClipboardItems.first(where: { $0.id == model.selectedClipboardItemID })
+            ?? model.visibleClipboardItems.first {
+            copyClipboardItem(item, close: true)
         }
     }
 
@@ -700,7 +738,7 @@ struct SearchPanelView: View {
 
     private var errorBinding: Binding<Bool> {
         Binding(
-            get: { model.presentedError != nil },
+            get: { model.presentedError != nil && SearchWindowCoordinator.shared.isKeyWindow },
             set: { if !$0 { model.presentedError = nil } }
         )
     }
@@ -756,33 +794,5 @@ private struct ClipboardQuickRow: View {
         let lineCount = max(1, item.text.split(separator: "\n", omittingEmptySubsequences: false).count)
         let countDescription = lineCount > 1 ? "\(lineCount) 行" : "\(item.text.count) 个字符"
         return "\(item.copiedAt.formatted(.relative(presentation: .named))) · \(countDescription)"
-    }
-}
-
-struct WindowMaterialBackground: NSViewRepresentable {
-    var material: NSVisualEffectView.Material = .underWindowBackground
-
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = WindowMaterialEffectView()
-        view.material = material
-        view.blendingMode = .behindWindow
-        view.state = .active
-        return view
-    }
-
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {
-        view.material = material
-        view.blendingMode = .behindWindow
-        view.state = .active
-    }
-}
-
-private final class WindowMaterialEffectView: NSVisualEffectView {
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        guard let window else { return }
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        window.titlebarAppearsTransparent = true
     }
 }

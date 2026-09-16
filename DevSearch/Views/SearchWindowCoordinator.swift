@@ -5,6 +5,7 @@ import SwiftUI
 final class SearchWindowCoordinator: NSObject, NSWindowDelegate {
     static let shared = SearchWindowCoordinator()
     private var panel: NSPanel?
+    var isKeyWindow: Bool { panel?.isKeyWindow == true }
     private weak var model: AppModel?
 
     private var isUIAcceptanceMode: Bool {
@@ -80,6 +81,7 @@ final class SearchWindowCoordinator: NSObject, NSWindowDelegate {
 
     func windowDidResignKey(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, window === panel else { return }
+        guard window.attachedSheet == nil else { return }
         guard !PreviewPanelCoordinator.shared.isInteractive else { return }
         guard !isUIAcceptanceMode else { return }
         PreviewPanelCoordinator.shared.hideImmediately()
@@ -104,7 +106,7 @@ final class SearchWindowCoordinator: NSObject, NSWindowDelegate {
         let top = frame.maxY
         frame.size.height = targetHeight
         frame.origin.y = top - targetHeight
-        panel.setFrame(frame, display: true, animate: panel.isVisible)
+        panel.setFrame(frame, display: true, animate: panel.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
 
     private func findSearchField(in view: NSView?) -> NSSearchField? {

@@ -167,15 +167,17 @@ final class AppModel: ObservableObject {
     }
 
     func chooseAndAddScanRoot() {
-        let panel = NSOpenPanel()
-        panel.title = "选择扫描目录"
-        panel.message = "RepoGlance 会发现此文件夹内的 Git 仓库和嵌套仓库。"
-        panel.prompt = "添加"
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = true
-        guard panel.runModal() == .OK else { return }
-        panel.urls.forEach { addScanRoot($0) }
+        Task { @MainActor in
+            let panel = NSOpenPanel()
+            panel.title = "选择扫描目录"
+            panel.message = "RepoGlance 会发现此文件夹内的 Git 仓库和嵌套仓库。"
+            panel.prompt = "添加"
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.allowsMultipleSelection = true
+            guard await NativePresentation.present(panel) == .OK else { return }
+            panel.urls.forEach { addScanRoot($0) }
+        }
     }
 
     func removeScanRoot(_ root: ScanRoot, removeMetadata: Bool = false) {
@@ -199,64 +201,68 @@ final class AppModel: ObservableObject {
     }
 
     func chooseReplacement(for root: ScanRoot) {
-        let panel = NSOpenPanel()
-        panel.title = "重新选择扫描目录"
-        panel.message = "选择原目录以恢复访问权限，或选择新的项目根目录。"
-        panel.prompt = "选择"
-        panel.directoryURL = URL(fileURLWithPath: root.displayPath, isDirectory: true)
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { @MainActor in
+            let panel = NSOpenPanel()
+            panel.title = "重新选择扫描目录"
+            panel.message = "选择原目录以恢复访问权限，或选择新的项目根目录。"
+            panel.prompt = "选择"
+            panel.directoryURL = URL(fileURLWithPath: root.displayPath, isDirectory: true)
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.allowsMultipleSelection = false
+            guard await NativePresentation.present(panel) == .OK, let url = panel.url else { return }
 
-        let newPath = PathNormalizer.canonicalPath(for: url)
-        guard newPath == root.canonicalPath || !data.scanRoots.contains(where: { $0.canonicalPath == newPath }) else {
-            presentedError = "该目录已经在扫描列表中。"
-            return
+            let newPath = PathNormalizer.canonicalPath(for: url)
+            guard newPath == root.canonicalPath || !data.scanRoots.contains(where: { $0.canonicalPath == newPath }) else {
+                presentedError = "该目录已经在扫描列表中。"
+                return
+            }
+            data.scanRoots.removeAll { $0.id == root.id }
+            data.scanRoots.append(ScanRoot(
+                canonicalPath: newPath,
+                displayPath: url.path,
+                isEnabled: root.isEnabled,
+                scanHiddenDirectories: root.scanHiddenDirectories,
+                maximumDepth: root.maximumDepth,
+                ignoredDirectoryNames: root.ignoredDirectoryNames
+            ))
+            persist()
+            configureAutomaticScanning()
+            startScan()
         }
-        data.scanRoots.removeAll { $0.id == root.id }
-        data.scanRoots.append(ScanRoot(
-            canonicalPath: newPath,
-            displayPath: url.path,
-            isEnabled: root.isEnabled,
-            scanHiddenDirectories: root.scanHiddenDirectories,
-            maximumDepth: root.maximumDepth,
-            ignoredDirectoryNames: root.ignoredDirectoryNames
-        ))
-        persist()
-        configureAutomaticScanning()
-        startScan()
     }
 
     func chooseAndAddEditor() {
-        let panel = NSOpenPanel()
-        panel.title = "选择编辑器"
-        panel.prompt = "添加"
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.application]
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { @MainActor in
+            let panel = NSOpenPanel()
+            panel.title = "选择编辑器"
+            panel.prompt = "添加"
+            panel.canChooseDirectories = false
+            panel.canChooseFiles = true
+            panel.allowsMultipleSelection = false
+            panel.allowedContentTypes = [.application]
+            guard await NativePresentation.present(panel) == .OK, let url = panel.url else { return }
 
-        let bundle = Bundle(url: url)
-        guard let identifier = bundle?.bundleIdentifier else {
-            presentedError = "所选应用没有有效的 Bundle Identifier。"
-            return
+            let bundle = Bundle(url: url)
+            guard let identifier = bundle?.bundleIdentifier else {
+                presentedError = "所选应用没有有效的 Bundle Identifier。"
+                return
+            }
+            let name = (bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+                ?? (bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String)
+                ?? url.deletingPathExtension().lastPathComponent
+            let editor = EditorDefinition(
+                id: identifier,
+                name: name,
+                bundleIdentifier: identifier,
+                applicationPath: url.path,
+                isManuallyAdded: true
+            )
+            data.editors.removeAll { $0.id == editor.id }
+            data.editors.append(editor)
+            data.editors.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            persist()
         }
-        let name = (bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
-            ?? (bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String)
-            ?? url.deletingPathExtension().lastPathComponent
-        let editor = EditorDefinition(
-            id: identifier,
-            name: name,
-            bundleIdentifier: identifier,
-            applicationPath: url.path,
-            isManuallyAdded: true
-        )
-        data.editors.removeAll { $0.id == editor.id }
-        data.editors.append(editor)
-        data.editors.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        persist()
     }
 
     func removeEditor(_ editor: EditorDefinition) {
@@ -312,13 +318,15 @@ final class AppModel: ObservableObject {
         if let configuredEditor, editorService.applicationPath(for: configuredEditor) == nil {
             await open(
                 project,
-                target: chooseOpeningTarget(
+                target: await chooseOpeningTarget(
                     informativeText: "之前选择的编辑器已不可用。请选择另一个编辑器，或先在 Finder 中查看项目。"
                 )
             )
             return
         }
-        let openingTarget = configuredEditor.map(OpeningTarget.editor) ?? chooseOpeningTarget()
+        let openingTarget: OpeningTarget
+        if let configuredEditor { openingTarget = .editor(configuredEditor) }
+        else { openingTarget = await chooseOpeningTarget() }
         await open(project, target: openingTarget)
     }
 
@@ -491,12 +499,10 @@ final class AppModel: ObservableObject {
     }
 
     func selectTool(_ tool: DeveloperToolID) {
+        guard toolbox.selectedTool != tool else { return }
         toolbox.selectedTool = tool
         var preferences = data.toolboxPreferences
         preferences.lastSelectedToolID = tool
-        preferences.recentToolIDs.removeAll { $0 == tool }
-        preferences.recentToolIDs.insert(tool, at: 0)
-        preferences.recentToolIDs = Array(preferences.recentToolIDs.prefix(5))
         data.toolboxPreferences = preferences
         persist()
     }
@@ -566,117 +572,118 @@ final class AppModel: ObservableObject {
     }
 
     func chooseAndRelocate(_ project: ProjectRecord) {
-        let panel = NSOpenPanel()
-        panel.title = "重新定位项目"
-        panel.message = "选择项目新的 Git 仓库目录。"
-        panel.prompt = "重新定位"
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { @MainActor in
+            let panel = NSOpenPanel()
+            panel.title = "重新定位项目"
+            panel.message = "选择项目新的 Git 仓库目录。"
+            panel.prompt = "重新定位"
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.allowsMultipleSelection = false
+            guard await NativePresentation.present(panel) == .OK, let url = panel.url else { return }
 
-        Task { [weak self, scanner] in
-            guard let self else { return }
-            guard await scanner.isGitRepository(at: url) else {
-                self.presentedError = "所选目录不是有效的 Git 仓库。"
-                return
-            }
-            let newPath = PathNormalizer.canonicalPath(for: url)
-            guard let root = self.data.scanRoots
-                .filter({ newPath == $0.canonicalPath || PathNormalizer.isDescendant(newPath, of: $0.canonicalPath) })
-                .max(by: { $0.canonicalPath.count < $1.canonicalPath.count })
-            else {
-                self.presentedError = "新位置不在已配置的扫描目录内，请先添加包含它的扫描目录。"
-                return
-            }
-
-            let oldTree = self.data.projects.filter {
-                $0.id == project.id || PathNormalizer.isDescendant($0.id, of: project.id)
-            }
-            var mappings: [(old: ProjectRecord, newPath: String)] = []
-            for old in oldTree {
-                let suffix = String(old.canonicalPath.dropFirst(project.canonicalPath.count))
-                let candidatePath = newPath + suffix
-                let candidateURL = URL(fileURLWithPath: candidatePath, isDirectory: true)
-                if await scanner.isGitRepository(at: candidateURL) {
-                    mappings.append((old, candidatePath))
+            Task { [self, scanner] in
+                guard await scanner.isGitRepository(at: url) else {
+                    self.presentedError = "所选目录不是有效的 Git 仓库。"
+                    return
                 }
-            }
-
-            let unmatchedCount = oldTree.count - mappings.count
-            if mappings.count > 1 || unmatchedCount > 0 {
-                let alert = NSAlert()
-                alert.messageText = "同时迁移嵌套仓库？"
-                var details = "将迁移父项目和 \(max(0, mappings.count - 1)) 个匹配的子仓库。"
-                if unmatchedCount > 0 {
-                    details += " \(unmatchedCount) 个未匹配的子仓库将保留为路径失效。"
-                }
-                alert.informativeText = details
-                alert.addButton(withTitle: "继续")
-                alert.addButton(withTitle: "取消")
-                guard alert.runModal() == .alertFirstButtonReturn else { return }
-            }
-
-            let migratedOldIDs = Set(mappings.map { $0.old.id })
-            let destinationIDs = Set(mappings.map { $0.newPath })
-            let unaffectedPaths = self.data.projects.compactMap { record -> String? in
-                guard !migratedOldIDs.contains(record.id), !destinationIDs.contains(record.id) else { return nil }
-                return record.id
-            }
-            let knownDestinationPaths = unaffectedPaths + Array(destinationIDs)
-
-            let relocatedRecords = mappings.map { mapping -> ProjectRecord in
-                let destinationURL = URL(fileURLWithPath: mapping.newPath, isDirectory: true)
-                let readme = ReadmeService.readme(in: destinationURL)
-                let destinationRoot = self.data.scanRoots
-                    .filter {
-                        mapping.newPath == $0.canonicalPath
-                            || PathNormalizer.isDescendant(mapping.newPath, of: $0.canonicalPath)
-                    }
+                let newPath = PathNormalizer.canonicalPath(for: url)
+                guard let root = self.data.scanRoots
+                    .filter({ newPath == $0.canonicalPath || PathNormalizer.isDescendant(newPath, of: $0.canonicalPath) })
                     .max(by: { $0.canonicalPath.count < $1.canonicalPath.count })
-                    ?? root
-                let parent = knownDestinationPaths
-                    .filter { PathNormalizer.isDescendant(mapping.newPath, of: $0) }
-                    .max(by: { $0.count < $1.count })
-                return ProjectRecord(
-                    canonicalPath: mapping.newPath,
-                    directoryName: destinationURL.lastPathComponent,
-                    displayName: mapping.old.displayName,
-                    scanRootPath: destinationRoot.canonicalPath,
-                    parentProjectID: parent,
-                    readmePath: readme?.url.path,
-                    readmeExcerpt: readme?.excerpt,
-                    readmeWasTruncated: readme?.wasTruncated ?? false,
-                    customDescription: mapping.old.customDescription,
-                    tags: mapping.old.tags,
-                    isFavorite: mapping.old.isFavorite,
-                    defaultEditorBundleIdentifier: mapping.old.defaultEditorBundleIdentifier,
-                    firstSeenAt: mapping.old.firstSeenAt,
-                    updatedAt: .now,
-                    lastOpenedAt: mapping.old.lastOpenedAt
-                )
-            }
+                else {
+                    self.presentedError = "新位置不在已配置的扫描目录内，请先添加包含它的扫描目录。"
+                    return
+                }
 
-            // A background scan may discover destinations before the user
-            // confirms relocation. Replace those transient records while
-            // preserving metadata from every matching record in the old tree.
-            self.data.projects.removeAll {
-                migratedOldIDs.contains($0.id) || destinationIDs.contains($0.id)
-            }
-            self.data.projects.append(contentsOf: relocatedRecords)
+                let oldTree = self.data.projects.filter {
+                    $0.id == project.id || PathNormalizer.isDescendant($0.id, of: project.id)
+                }
+                var mappings: [(old: ProjectRecord, newPath: String)] = []
+                for old in oldTree {
+                    let suffix = String(old.canonicalPath.dropFirst(project.canonicalPath.count))
+                    let candidatePath = newPath + suffix
+                    let candidateURL = URL(fileURLWithPath: candidatePath, isDirectory: true)
+                    if await scanner.isGitRepository(at: candidateURL) {
+                        mappings.append((old, candidatePath))
+                    }
+                }
 
-            // Unmatched descendants remain as missing records, but must not
-            // reference a parent path that was successfully migrated away.
-            let remainingPaths = Set(self.data.projects.map(\.id))
-            for index in self.data.projects.indices
-            where oldTree.contains(where: { $0.id == self.data.projects[index].id }) {
-                let recordPath = self.data.projects[index].id
-                self.data.projects[index].parentProjectID = remainingPaths
-                    .filter { PathNormalizer.isDescendant(recordPath, of: $0) }
-                    .max(by: { $0.count < $1.count })
+                let unmatchedCount = oldTree.count - mappings.count
+                if mappings.count > 1 || unmatchedCount > 0 {
+                    let alert = NSAlert()
+                    alert.messageText = "同时迁移嵌套仓库？"
+                    var details = "将迁移父项目和 \(max(0, mappings.count - 1)) 个匹配的子仓库。"
+                    if unmatchedCount > 0 {
+                        details += " \(unmatchedCount) 个未匹配的子仓库将保留为路径失效。"
+                    }
+                    alert.informativeText = details
+                    alert.addButton(withTitle: "继续")
+                    alert.addButton(withTitle: "取消")
+                    guard await NativePresentation.present(alert) == .alertFirstButtonReturn else { return }
+                }
+
+                let migratedOldIDs = Set(mappings.map { $0.old.id })
+                let destinationIDs = Set(mappings.map { $0.newPath })
+                let unaffectedPaths = self.data.projects.compactMap { record -> String? in
+                    guard !migratedOldIDs.contains(record.id), !destinationIDs.contains(record.id) else { return nil }
+                    return record.id
+                }
+                let knownDestinationPaths = unaffectedPaths + Array(destinationIDs)
+
+                let relocatedRecords = mappings.map { mapping -> ProjectRecord in
+                    let destinationURL = URL(fileURLWithPath: mapping.newPath, isDirectory: true)
+                    let readme = ReadmeService.readme(in: destinationURL)
+                    let destinationRoot = self.data.scanRoots
+                        .filter {
+                            mapping.newPath == $0.canonicalPath
+                                || PathNormalizer.isDescendant(mapping.newPath, of: $0.canonicalPath)
+                        }
+                        .max(by: { $0.canonicalPath.count < $1.canonicalPath.count })
+                        ?? root
+                    let parent = knownDestinationPaths
+                        .filter { PathNormalizer.isDescendant(mapping.newPath, of: $0) }
+                        .max(by: { $0.count < $1.count })
+                    return ProjectRecord(
+                        canonicalPath: mapping.newPath,
+                        directoryName: destinationURL.lastPathComponent,
+                        displayName: mapping.old.displayName,
+                        scanRootPath: destinationRoot.canonicalPath,
+                        parentProjectID: parent,
+                        readmePath: readme?.url.path,
+                        readmeExcerpt: readme?.excerpt,
+                        readmeWasTruncated: readme?.wasTruncated ?? false,
+                        customDescription: mapping.old.customDescription,
+                        tags: mapping.old.tags,
+                        isFavorite: mapping.old.isFavorite,
+                        defaultEditorBundleIdentifier: mapping.old.defaultEditorBundleIdentifier,
+                        firstSeenAt: mapping.old.firstSeenAt,
+                        updatedAt: .now,
+                        lastOpenedAt: mapping.old.lastOpenedAt
+                    )
+                }
+
+                // A background scan may discover destinations before the user
+                // confirms relocation. Replace those transient records while
+                // preserving metadata from every matching record in the old tree.
+                self.data.projects.removeAll {
+                    migratedOldIDs.contains($0.id) || destinationIDs.contains($0.id)
+                }
+                self.data.projects.append(contentsOf: relocatedRecords)
+
+                // Unmatched descendants remain as missing records, but must not
+                // reference a parent path that was successfully migrated away.
+                let remainingPaths = Set(self.data.projects.map(\.id))
+                for index in self.data.projects.indices
+                where oldTree.contains(where: { $0.id == self.data.projects[index].id }) {
+                    let recordPath = self.data.projects[index].id
+                    self.data.projects[index].parentProjectID = remainingPaths
+                        .filter { PathNormalizer.isDescendant(recordPath, of: $0) }
+                        .max(by: { $0.count < $1.count })
+                }
+                self.persist()
+                self.startScan()
             }
-            self.persist()
-            self.startScan()
         }
     }
 
@@ -686,49 +693,53 @@ final class AppModel: ObservableObject {
     }
 
     func exportCustomData() {
-        let panel = NSSavePanel()
-        panel.title = "导出 RepoGlance 数据"
-        panel.nameFieldStringValue = "DevSearch-Export.json"
-        panel.allowedContentTypes = [.json]
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            encoder.dateEncodingStrategy = .iso8601
-            try encoder.encode(data).write(to: url, options: .atomic)
-        } catch {
-            presentedError = "导出失败：\(error.localizedDescription)"
+        Task { @MainActor in
+            let panel = NSSavePanel()
+            panel.title = "导出 RepoGlance 数据"
+            panel.nameFieldStringValue = "DevSearch-Export.json"
+            panel.allowedContentTypes = [.json]
+            guard await NativePresentation.present(panel) == .OK, let url = panel.url else { return }
+            do {
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                encoder.dateEncodingStrategy = .iso8601
+                try encoder.encode(data).write(to: url, options: .atomic)
+            } catch {
+                presentedError = "导出失败：\(error.localizedDescription)"
+            }
         }
     }
 
     func importCustomData() {
-        let panel = NSOpenPanel()
-        panel.title = "导入 RepoGlance 数据"
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowedContentTypes = [.json]
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        let confirmation = NSAlert()
-        confirmation.messageText = "导入并替换当前数据？"
-        confirmation.informativeText = "当前的扫描目录、说明、标签、收藏和偏好会被所选文件替换。此操作无法撤销。"
-        confirmation.alertStyle = .warning
-        confirmation.addButton(withTitle: "导入并替换")
-        confirmation.addButton(withTitle: "取消")
-        guard confirmation.runModal() == .alertFirstButtonReturn else { return }
-        do {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            data = try decoder.decode(AppData.self, from: Data(contentsOf: url))
-            mergeDiscoveredEditors()
-            validateKnownPaths()
-            configureAutomaticScanning()
-            configureGlobalShortcut()
-            configureClipboardMonitoring()
-            persist()
-            Task { await toolbox.start(preferences: data.toolboxPreferences) }
-            startScan()
-        } catch {
-            presentedError = "导入失败：\(error.localizedDescription)"
+        Task { @MainActor in
+            let panel = NSOpenPanel()
+            panel.title = "导入 RepoGlance 数据"
+            panel.canChooseDirectories = false
+            panel.canChooseFiles = true
+            panel.allowedContentTypes = [.json]
+            guard await NativePresentation.present(panel) == .OK, let url = panel.url else { return }
+            let confirmation = NSAlert()
+            confirmation.messageText = "导入并替换当前数据？"
+            confirmation.informativeText = "当前的扫描目录、说明、标签、收藏和偏好会被所选文件替换。此操作无法撤销。"
+            confirmation.alertStyle = .warning
+            confirmation.addButton(withTitle: "导入并替换")
+            confirmation.addButton(withTitle: "取消")
+            guard await NativePresentation.present(confirmation) == .alertFirstButtonReturn else { return }
+            do {
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                data = try decoder.decode(AppData.self, from: Data(contentsOf: url))
+                mergeDiscoveredEditors()
+                validateKnownPaths()
+                configureAutomaticScanning()
+                configureGlobalShortcut()
+                configureClipboardMonitoring()
+                persist()
+                Task { await toolbox.start(preferences: data.toolboxPreferences) }
+                startScan()
+            } catch {
+                presentedError = "导入失败：\(error.localizedDescription)"
+            }
         }
     }
 
@@ -772,7 +783,7 @@ final class AppModel: ObservableObject {
 
     private func chooseOpeningTarget(
         informativeText: String = "尚未设置默认编辑器。你可以选择一个编辑器，或先在 Finder 中查看项目。"
-    ) -> OpeningTarget {
+    ) async -> OpeningTarget {
         let alert = NSAlert()
         alert.messageText = "选择打开方式"
         alert.informativeText = informativeText
@@ -788,7 +799,7 @@ final class AppModel: ObservableObject {
         alert.addButton(withTitle: "打开")
         alert.addButton(withTitle: "取消")
 
-        guard alert.runModal() == .alertFirstButtonReturn else { return .cancel }
+        guard await NativePresentation.present(alert) == .alertFirstButtonReturn else { return .cancel }
         if popup.indexOfSelectedItem < availableEditors.count {
             return .editor(availableEditors[popup.indexOfSelectedItem].bundleIdentifier)
         }

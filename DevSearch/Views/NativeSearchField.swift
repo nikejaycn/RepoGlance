@@ -9,6 +9,8 @@ struct NativeSearchField: NSViewRepresentable {
     var usesSidebarAppearance = false
     var preferredHeight: CGFloat?
     var accessibilityIdentifier = "search-field"
+    var usesResultNavigation = false
+    var usesQuickPanelCommands = false
     var onMoveUp: () -> Void = {}
     var onMoveDown: () -> Void = {}
     var onSubmit: () -> Void = {}
@@ -45,6 +47,8 @@ struct NativeSearchField: NSViewRepresentable {
         field.setAccessibilityRole(.textField)
         field.setAccessibilitySubrole(.searchField)
         field.setAccessibilityIdentifier(accessibilityIdentifier)
+        field.setAccessibilityLabel(placeholder)
+        field.usesQuickPanelCommands = usesQuickPanelCommands
         field.onMoveUp = onMoveUp
         field.onMoveDown = onMoveDown
         field.onChooseOpeningMethod = onChooseOpeningMethod
@@ -76,8 +80,10 @@ struct NativeSearchField: NSViewRepresentable {
         field.setAccessibilityRole(.textField)
         field.setAccessibilitySubrole(.searchField)
         field.setAccessibilityIdentifier(accessibilityIdentifier)
+        field.setAccessibilityLabel(placeholder)
         context.coordinator.update(owner: self)
         guard let field = field as? ActionSearchField else { return }
+        field.usesQuickPanelCommands = usesQuickPanelCommands
         field.onMoveUp = onMoveUp
         field.onMoveDown = onMoveDown
         field.onChooseOpeningMethod = onChooseOpeningMethod
@@ -115,10 +121,14 @@ struct NativeSearchField: NSViewRepresentable {
         var onRevealInFinder: () -> Void
         var onEscape: () -> Void
         var onEnterPreview: () -> Void
+        var usesResultNavigation: Bool
+        var usesQuickPanelCommands: Bool
         private var arrowKeyMonitor: Any?
 
         init(owner: NativeSearchField) {
             text = owner.$text
+            usesResultNavigation = owner.usesResultNavigation
+            usesQuickPanelCommands = owner.usesQuickPanelCommands
             onMoveUp = owner.onMoveUp
             onMoveDown = owner.onMoveDown
             onSubmit = owner.onSubmit
@@ -130,6 +140,8 @@ struct NativeSearchField: NSViewRepresentable {
 
         func update(owner: NativeSearchField) {
             text = owner.$text
+            usesResultNavigation = owner.usesResultNavigation
+            usesQuickPanelCommands = owner.usesQuickPanelCommands
             onMoveUp = owner.onMoveUp
             onMoveDown = owner.onMoveDown
             onSubmit = owner.onSubmit
@@ -145,12 +157,13 @@ struct NativeSearchField: NSViewRepresentable {
                 guard field?.currentEditor() != nil else { return event }
                 let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                 let shortcutModifiers = modifiers.intersection([.command, .option, .control, .shift])
-                if shortcutModifiers == .command, event.keyCode == 124 {
+                if self?.usesQuickPanelCommands == true, shortcutModifiers == .command, event.keyCode == 124 {
                     self?.onEnterPreview()
                     return nil
                 }
                 let textEditingModifiers: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
                 guard modifiers.intersection(textEditingModifiers).isEmpty else { return event }
+                guard self?.usesResultNavigation == true else { return event }
                 switch event.keyCode {
                 case 125: self?.onMoveDown(); return nil
                 case 126: self?.onMoveUp(); return nil
@@ -181,13 +194,15 @@ struct NativeSearchField: NSViewRepresentable {
         ) -> Bool {
             switch commandSelector {
             case #selector(NSResponder.moveUp(_:)):
+                guard usesResultNavigation else { return false }
                 onMoveUp()
             case #selector(NSResponder.moveDown(_:)):
+                guard usesResultNavigation else { return false }
                 onMoveDown()
             case #selector(NSResponder.insertNewline(_:)):
                 let modifiers = NSApp.currentEvent?.modifierFlags ?? []
-                if modifiers.contains(.command) { onChooseOpeningMethod() }
-                else if modifiers.contains(.option) { onRevealInFinder() }
+                if usesQuickPanelCommands, modifiers.contains(.command) { onChooseOpeningMethod() }
+                else if usesQuickPanelCommands, modifiers.contains(.option) { onRevealInFinder() }
                 else { onSubmit() }
             case #selector(NSResponder.cancelOperation(_:)):
                 onEscape()
@@ -264,6 +279,7 @@ private final class SidebarSearchFieldCell: NSSearchFieldCell {
 
 @MainActor
 private final class ActionSearchField: NSSearchField {
+    var usesQuickPanelCommands = false
     var onMoveUp: () -> Void = {}
     var onMoveDown: () -> Void = {}
     var onChooseOpeningMethod: () -> Void = {}
@@ -290,6 +306,7 @@ private final class ActionSearchField: NSSearchField {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard usesQuickPanelCommands else { return super.performKeyEquivalent(with: event) }
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let character = event.charactersIgnoringModifiers?.lowercased()
 

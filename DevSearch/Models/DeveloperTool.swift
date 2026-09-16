@@ -59,7 +59,7 @@ enum DeveloperToolID: String, Codable, CaseIterable, Identifiable, Hashable, Sen
         case .timestamp: "时间戳 Unix 秒 毫秒 日期 时间 时区 ISO 8601"
         case .json: "JSON 校验 格式化 美化 压缩 minify validate"
         case .uuid: "UUID GUID v4 随机 标识符 批量"
-        case .hash: "哈希 摘要 MD5 SHA-1 SHA-256 SHA-512 checksum"
+        case .hash: "哈希 Hash 摘要 MD5 SHA-1 SHA-256 SHA-512 checksum"
         }
     }
 
@@ -194,7 +194,6 @@ enum QRCorrectionLevel: String, Codable, CaseIterable, Identifiable, Sendable {
 
 struct ToolboxPreferences: Codable, Hashable, Sendable {
     var favoriteToolIDs: Set<DeveloperToolID> = []
-    var recentToolIDs: [DeveloperToolID] = []
     var lastSelectedToolID: DeveloperToolID = .qrCode
     var restoreLastContent = false
     var globalShortcutEnabled = true
@@ -217,7 +216,7 @@ struct ToolboxPreferences: Codable, Hashable, Sendable {
 
 extension ToolboxPreferences {
     private enum CodingKeys: String, CodingKey {
-        case favoriteToolIDs, recentToolIDs, lastSelectedToolID, restoreLastContent
+        case favoriteToolIDs, lastSelectedToolID, restoreLastContent
         case globalShortcutEnabled, globalShortcut
         case encodingFormat, encodingDirection
         case timestampDirection, timestampUnit, timestampTimeZoneIdentifier
@@ -230,7 +229,6 @@ extension ToolboxPreferences {
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         favoriteToolIDs = try values.decodeIfPresent(Set<DeveloperToolID>.self, forKey: .favoriteToolIDs) ?? []
-        recentToolIDs = try values.decodeIfPresent([DeveloperToolID].self, forKey: .recentToolIDs) ?? []
         lastSelectedToolID = try values.decodeIfPresent(DeveloperToolID.self, forKey: .lastSelectedToolID) ?? .qrCode
         restoreLastContent = try values.decodeIfPresent(Bool.self, forKey: .restoreLastContent) ?? false
         globalShortcutEnabled = try values.decodeIfPresent(Bool.self, forKey: .globalShortcutEnabled) ?? true

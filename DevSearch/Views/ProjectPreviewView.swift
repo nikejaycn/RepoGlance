@@ -79,6 +79,14 @@ struct ProjectPreviewView: View {
             }
         }
         .onExitCommand { PreviewPanelCoordinator.shared.returnToSearch() }
+        .alert("无法完成操作", isPresented: Binding(
+            get: { model.presentedError != nil && PreviewPanelCoordinator.shared.isInteractive },
+            set: { if !$0 { model.presentedError = nil } }
+        )) {
+            Button("好", role: .cancel) { model.presentedError = nil }
+        } message: {
+            Text(model.presentedError ?? "")
+        }
     }
 
     private func header(_ project: ProjectRecord) -> some View {

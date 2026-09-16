@@ -8,14 +8,15 @@ struct SettingsView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            VStack(spacing: 0) {
+            NativeSidebar {
                 NativeSearchField(
                     text: $query,
                     placeholder: "搜索设置…",
                     focusOnAppear: false,
                     usesSidebarAppearance: true,
                     preferredHeight: 28,
-                    accessibilityIdentifier: "settings-search-field"
+                    accessibilityIdentifier: "settings-search-field",
+                    onEscape: { query = "" }
                 )
                 .frame(height: 28)
                 .padding(.horizontal, 12)
@@ -26,25 +27,31 @@ struct SettingsView: View {
                         .tag(section)
                 }
                 .listStyle(.sidebar)
+                .accessibilityIdentifier("settings-sidebar")
                 .overlay {
                     if filteredSections.isEmpty {
-                        ContentUnavailableView.search(text: query)
+                        SidebarSearchEmptyState { query = "" }
                     }
                 }
             }
-            .frame(width: 218)
-            .background(SidebarMaterialBackground())
 
             Divider()
 
-            Group {
-                switch selection {
-                case .general: GeneralSettingsView()
-                case .sources: ScanRootsSettingsView()
-                case .opening: EditorSettingsView()
-                case .clipboard: ClipboardSettingsView()
-                case .toolbox: ToolboxSettingsView()
-                case .data: IndexSettingsView()
+            VStack(alignment: .leading, spacing: 0) {
+                Text(selection.title)
+                    .font(.title2.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 20)
+                Group {
+                    switch selection {
+                    case .general: GeneralSettingsView()
+                    case .sources: ScanRootsSettingsView()
+                    case .opening: EditorSettingsView()
+                    case .clipboard: ClipboardSettingsView()
+                    case .toolbox: ToolboxSettingsView()
+                    case .data: IndexSettingsView()
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -54,28 +61,20 @@ struct SettingsView: View {
             guard !filteredSections.contains(selection), let first = filteredSections.first else { return }
             selection = first
         }
+        .alert("无法完成操作", isPresented: Binding(
+            get: { model.presentedError != nil && SettingsWindowCoordinator.shared.isKeyWindow },
+            set: { if !$0 { model.presentedError = nil } }
+        )) {
+            Button("好", role: .cancel) { model.presentedError = nil }
+        } message: {
+            Text(model.presentedError ?? "")
+        }
     }
 
     private var filteredSections: [SettingsSection] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { return SettingsSection.allCases }
         return SettingsSection.allCases.filter { $0.matches(needle) }
-    }
-}
-
-private struct SidebarMaterialBackground: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = .sidebar
-        view.blendingMode = .withinWindow
-        view.state = .followsWindowActiveState
-        return view
-    }
-
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {
-        view.material = .sidebar
-        view.blendingMode = .withinWindow
-        view.state = .followsWindowActiveState
     }
 }
 
@@ -158,7 +157,7 @@ private struct GeneralSettingsView: View {
             }
 
             Section("索引更新") {
-                Picker("定时兜底扫描", selection: preferenceBinding(\.automaticScanIntervalMinutes)) {
+                Picker("自动重新扫描", selection: preferenceBinding(\.automaticScanIntervalMinutes)) {
                     Text("关闭（仍监听文件变化）").tag(0)
                     Text("每 5 分钟").tag(5)
                     Text("每 15 分钟").tag(15)
@@ -246,7 +245,7 @@ private struct ToolboxSettingsView: View {
                 Button("打开开发工具箱") {
                     ToolboxWindowCoordinator.shared.show(model: model)
                 }
-                Button("重置工具偏好…") {
+                Button("重置工具偏好") {
                     let current = model.data.toolboxPreferences
                     let restore = model.data.toolboxPreferences.restoreLastContent
                     let shortcutEnabled = model.data.toolboxPreferences.globalShortcutEnabled
@@ -255,7 +254,6 @@ private struct ToolboxSettingsView: View {
                     defaults.globalShortcutEnabled = shortcutEnabled
                     defaults.globalShortcut = current.globalShortcut
                     defaults.favoriteToolIDs = current.favoriteToolIDs
-                    defaults.recentToolIDs = current.recentToolIDs
                     defaults.lastSelectedToolID = current.lastSelectedToolID
                     model.updateToolboxPreferences(defaults)
                 }
@@ -426,6 +424,7 @@ private struct ScanRootsSettingsView: View {
                             HStack {
                                 Toggle("", isOn: rootEnabledBinding(root))
                                     .labelsHidden()
+                                    .accessibilityLabel("启用扫描目录 \(root.displayPath)")
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(URL(fileURLWithPath: root.canonicalPath).lastPathComponent)
                                     Text(root.displayPath)
